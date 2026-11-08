@@ -868,7 +868,13 @@
                         const title = this.normalizeTmdbTitle(this.tmdbTitleText(item));
                         const date = String(item.release_date || item.first_air_date || '');
                         let score = 0;
-                        if (title && (title === base || title.includes(base) || base.includes(title))) score += 100;
+                        if (title && title === base) {
+                            score += 160;
+                        } else if (title && (title.includes(base) || base.includes(title))) {
+                            const shorter = Math.min(title.length, base.length);
+                            const longer = Math.max(title.length, base.length);
+                            if (longer && shorter / longer >= 0.6) score += 80;
+                        }
                         score += this.tmdbBigramOverlap(target, title) * 8;
                         if (year && date.startsWith(year)) score += 40;
                         score += Math.min(20, Math.log10(Number(item.popularity || 1) + 1) * 5);
