@@ -24,7 +24,7 @@
             <a href="#first-run">三、首次使用</a>
             <a href="#sites">四、添加采集站</a>
             <a href="#pansou">五、网盘搜索</a>
-            <a href="#tmdb">六、TMDb 反代</a>
+            <a href="#tmdb">六、TMDb 功能与反代</a>
             <a href="#api">七、API 一览</a>
             <a href="#faq">八、常见问题</a>
             <a href="#notice">免责声明</a>
@@ -272,7 +272,20 @@ PANSOU_URL=http://你的地址:8888</code></pre>
         </section>
 
         <section id="tmdb">
-            <h2>六、TMDb 反代（默认零配置）</h2>
+            <h2>六、TMDb 功能与反代（默认零配置）</h2>
+            <h3>首页和详情页已经用到的功能</h3>
+            <ul>
+                <li><strong>首页推荐</strong>：本周趋势、华语剧集、日韩剧集、港台电影、正在热映、高分电影、今日播出。</li>
+                <li><strong>影视详情</strong>：评分、上映日期、片长、分级、类型、关键词、主创、演员和简介。</li>
+                <li><strong>系列作品</strong>：电影属于系列时，展示同系列其他影片，可直接继续查看。</li>
+                <li><strong>预告片</strong>：优先使用 YouTube 官方预告；新片没有预告时不会显示空按钮。</li>
+                <li><strong>在哪儿看</strong>：按浏览器地区显示 Netflix、Disney+ 等平台，也可手动切换国家/地区。</li>
+                <li><strong>相似推荐与找片源</strong>：点击推荐继续浏览；点“找片源”会带片名回到 Maccms 聚合搜索，同时搜索 PanSou 网盘资源。</li>
+            </ul>
+            <div class="note">
+                TMDb 只提供影视资料、图片和推荐，不存储影视文件。实际播放仍来自你在后台添加的采集站。
+            </div>
+
             <p>前端不会再请求任何人的私人域名。服务端内置了 <code>/tmdb</code> 同源代理：</p>
             <ul>
                 <li>前端 <code>/tmdb/3/...</code> → <code>https://api.themoviedb.org/3/...</code></li>

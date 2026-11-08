@@ -62,7 +62,7 @@
                             <div class="hero-btns">
                                 <button class="btn-play" @click="autoSearch(item.title)"><i class="fas fa-play"></i>
                                     播放</button>
-                                <button class="btn-info" @click="autoSearch(item.title)"><i
+                                <button class="btn-info" @click="openTmdb(item, item.type)"><i
                                         class="fas fa-info-circle"></i> 更多信息</button>
                             </div>
                         </div>
@@ -92,7 +92,7 @@
                     </div>
                 </div>
                 <div class="hot-row" data-section="movie">
-                    <div class="hot-card" v-for="item in movieList" :key="item.id" @click="autoSearch(item.title)">
+                    <div class="hot-card" v-for="item in movieList" :key="item.id" @click="openTmdb(item, 'movie')">
                         <div class="poster-wrap">
                             <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
@@ -115,7 +115,7 @@
                     </div>
                 </div>
                 <div class="hot-row" data-section="tv">
-                    <div class="hot-card" v-for="item in tvList" :key="item.id" @click="autoSearch(item.name)">
+                    <div class="hot-card" v-for="item in tvList" :key="item.id" @click="openTmdb(item, 'tv')">
                         <div class="poster-wrap">
                             <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
@@ -138,7 +138,7 @@
                     </div>
                 </div>
                 <div class="hot-row" data-section="cn">
-                    <div class="hot-card" v-for="item in list_cn" :key="item.id" @click="autoSearch(item.name)">
+                    <div class="hot-card" v-for="item in list_cn" :key="item.id" @click="openTmdb(item, 'tv')">
                         <div class="poster-wrap">
                             <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
@@ -161,11 +161,99 @@
                     </div>
                 </div>
                 <div class="hot-row" data-section="krjp">
-                    <div class="hot-card" v-for="item in list_krjp" :key="item.id" @click="autoSearch(item.name)">
+                    <div class="hot-card" v-for="item in list_krjp" :key="item.id" @click="openTmdb(item, 'tv')">
                         <div class="poster-wrap">
                             <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                 item.vote_average.toFixed(1) }}</div>
+                        </div>
+                        <div class="movie-name">{{ item.name }}</div>
+                        <div class="movie-date">{{ item.first_air_date?.split('-')[0] }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. 港台精选 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="list_hktw.length > 0">
+                <div class="section-header">
+                    <div class="section-line"></div>
+                    <div class="section-title"><i class="fas fa-location-dot"></i> 港台精选·华语电影</div>
+                    <div class="hot-row-nav">
+                        <button class="nav-btn nav-prev" @click="scrollHotRow('hktw', 'prev')"><i class="fas fa-chevron-left"></i></button>
+                        <button class="nav-btn nav-next" @click="scrollHotRow('hktw', 'next')"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div class="hot-row" data-section="hktw">
+                    <div class="hot-card" v-for="item in list_hktw" :key="item.id" @click="openTmdb(item, 'movie')">
+                        <div class="poster-wrap">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
+                            <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average.toFixed(1) }}</div>
+                        </div>
+                        <div class="movie-name">{{ item.title }}</div>
+                        <div class="movie-date">{{ item.release_date?.split('-')[0] }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. 正在热映 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="nowPlayingList.length > 0">
+                <div class="section-header">
+                    <div class="section-line"></div>
+                    <div class="section-title"><i class="fas fa-ticket"></i> 正在热映·院线新片</div>
+                    <div class="hot-row-nav">
+                        <button class="nav-btn nav-prev" @click="scrollHotRow('nowplaying', 'prev')"><i class="fas fa-chevron-left"></i></button>
+                        <button class="nav-btn nav-next" @click="scrollHotRow('nowplaying', 'next')"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div class="hot-row" data-section="nowplaying">
+                    <div class="hot-card" v-for="item in nowPlayingList" :key="item.id" @click="openTmdb(item, 'movie')">
+                        <div class="poster-wrap">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
+                            <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average.toFixed(1) }}</div>
+                        </div>
+                        <div class="movie-name">{{ item.title }}</div>
+                        <div class="movie-date">{{ item.release_date?.split('-')[0] }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 9. 高分电影 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="topRatedList.length > 0">
+                <div class="section-header">
+                    <div class="section-line"></div>
+                    <div class="section-title"><i class="fas fa-award"></i> 高分典藏·口碑电影</div>
+                    <div class="hot-row-nav">
+                        <button class="nav-btn nav-prev" @click="scrollHotRow('toprated', 'prev')"><i class="fas fa-chevron-left"></i></button>
+                        <button class="nav-btn nav-next" @click="scrollHotRow('toprated', 'next')"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div class="hot-row" data-section="toprated">
+                    <div class="hot-card" v-for="item in topRatedList" :key="item.id" @click="openTmdb(item, 'movie')">
+                        <div class="poster-wrap">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
+                            <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average.toFixed(1) }}</div>
+                        </div>
+                        <div class="movie-name">{{ item.title }}</div>
+                        <div class="movie-date">{{ item.release_date?.split('-')[0] }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. 今日播出 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="airingTodayList.length > 0">
+                <div class="section-header">
+                    <div class="section-line"></div>
+                    <div class="section-title"><i class="fas fa-calendar-day"></i> 今日播出·追剧日历</div>
+                    <div class="hot-row-nav">
+                        <button class="nav-btn nav-prev" @click="scrollHotRow('airing', 'prev')"><i class="fas fa-chevron-left"></i></button>
+                        <button class="nav-btn nav-next" @click="scrollHotRow('airing', 'next')"><i class="fas fa-chevron-right"></i></button>
+                    </div>
+                </div>
+                <div class="hot-row" data-section="airing">
+                    <div class="hot-card" v-for="item in airingTodayList" :key="item.id" @click="openTmdb(item, 'tv')">
+                        <div class="poster-wrap">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
+                            <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average.toFixed(1) }}</div>
                         </div>
                         <div class="movie-name">{{ item.name }}</div>
                         <div class="movie-date">{{ item.first_air_date?.split('-')[0] }}</div>
@@ -314,6 +402,117 @@
             </div>
         </div>
 
+        <!-- TMDb 详情面板 -->
+        <div class="tmdb-overlay" :class="{ active: tmdbOpen }" @click.self="closeTmdb">
+            <button class="close-btn" @click="closeTmdb" aria-label="关闭"><i class="fas fa-times"></i></button>
+            <div v-if="tmdbLoading" class="tmdb-loading">
+                <div class="spinner-border text-danger"></div>
+                <div class="mt-3">正在读取 TMDb 资料...</div>
+            </div>
+            <div v-else-if="tmdbError" class="tmdb-loading">{{ tmdbError }}</div>
+            <div v-else-if="tmdbInfo" class="tmdb-sheet">
+                <div class="tmdb-banner" :style="{ backgroundImage: tmdbInfo.backdrop_path ? 'url(' + tmdbImg(tmdbInfo.backdrop_path, 'original') + ')' : 'none' }">
+                    <div class="tmdb-banner-shade"></div>
+                    <div class="tmdb-kind">{{ tmdbType === 'tv' ? '剧集' : '电影' }} · TMDb</div>
+                </div>
+                <div class="tmdb-content">
+                    <div class="tmdb-poster-col">
+                        <div class="tmdb-poster">
+                            <img v-if="tmdbInfo.poster_path" :src="tmdbImg(tmdbInfo.poster_path, 'w500')" :alt="tmdbTitleText(tmdbInfo)" loading="lazy">
+                            <div v-else class="tmdb-poster-empty"><i class="fas fa-film"></i></div>
+                        </div>
+                    </div>
+                    <div class="tmdb-info-col">
+                        <h2>{{ tmdbTitleText(tmdbInfo) }}</h2>
+                        <div class="tmdb-tagline" v-if="tmdbInfo.tagline">{{ tmdbInfo.tagline }}</div>
+                        <div class="tmdb-meta">
+                            <span class="tmdb-score"><i class="fas fa-star"></i> {{ tmdbScoreText(tmdbInfo) }}</span>
+                            <span v-if="tmdbDateText(tmdbInfo)">{{ tmdbDateText(tmdbInfo) }}</span>
+                            <span v-if="tmdbRuntimeText(tmdbInfo)">{{ tmdbRuntimeText(tmdbInfo) }}</span>
+                            <span v-if="tmdbInfo.status">{{ tmdbInfo.status }}</span>
+                            <span v-if="tmdbAgeRating" class="tmdb-certification">{{ tmdbAgeRating }}</span>
+                        </div>
+                        <div class="tmdb-credit" v-if="tmdbCreditLine">{{ tmdbCreditLine }}</div>
+                        <div class="tmdb-genres" v-if="tmdbInfo.genres && tmdbInfo.genres.length">
+                            <span v-for="genre in tmdbInfo.genres" :key="genre.id">{{ genre.name }}</span>
+                        </div>
+                        <div class="tmdb-keywords" v-if="tmdbKeywords.length">
+                            <span v-for="keyword in tmdbKeywords" :key="keyword.id">{{ keyword.name }}</span>
+                        </div>
+                        <p class="tmdb-overview">{{ tmdbInfo.overview || 'TMDb 暂无中文简介。' }}</p>
+                        <div class="tmdb-actions">
+                            <button class="tmdb-action primary" @click="searchFromTmdb"><i class="fas fa-search"></i> 找片源</button>
+                            <a v-if="tmdbTrailer" :href="'https://www.youtube.com/watch?v=' + tmdbTrailer.key" target="_blank" rel="noopener noreferrer" class="tmdb-action"><i class="fab fa-youtube"></i> 看预告</a>
+                            <a v-if="tmdbInfo.homepage" :href="tmdbInfo.homepage" target="_blank" rel="noopener noreferrer" class="tmdb-action"><i class="fas fa-globe"></i> 官网</a>
+                            <a v-if="tmdbInfo.external_ids && tmdbInfo.external_ids.imdb_id" :href="'https://www.imdb.com/title/' + tmdbInfo.external_ids.imdb_id" target="_blank" rel="noopener noreferrer" class="tmdb-action">IMDb</a>
+                        </div>
+
+                        <div class="tmdb-block" v-if="tmdbCollectionParts.length">
+                            <h3>{{ tmdbInfo.belongs_to_collection && tmdbInfo.belongs_to_collection.name }}</h3>
+                            <div class="tmdb-rec-row">
+                                <div class="tmdb-rec-card" v-for="part in tmdbCollectionParts" :key="part.id" @click.stop="openTmdb(part, 'movie')">
+                                    <div class="tmdb-rec-poster">
+                                        <img v-if="part.poster_path" :src="tmdbImg(part.poster_path, 'w185')" :alt="tmdbTitleText(part)" loading="lazy">
+                                        <div v-else class="tmdb-rec-placeholder"><i class="fas fa-film"></i></div>
+                                    </div>
+                                    <div class="tmdb-rec-name">{{ tmdbTitleText(part) }}</div>
+                                    <div class="tmdb-rec-sub">{{ tmdbDateText(part) }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tmdb-block" v-if="tmdbCast.length">
+                            <h3>主要演员</h3>
+                            <div class="tmdb-cast-row">
+                                <div class="tmdb-cast-card" v-for="person in tmdbCast" :key="person.id || person.name">
+                                    <div class="tmdb-cast-photo">
+                                        <img v-if="person.profile_path" :src="tmdbImg(person.profile_path, 'w185')" :alt="person.name" loading="lazy">
+                                        <i v-else class="fas fa-user"></i>
+                                    </div>
+                                    <div class="tmdb-cast-name">{{ person.name }}</div>
+                                    <div class="tmdb-cast-role">{{ person.character || person.roles?.[0]?.character || '' }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="tmdb-block">
+                            <div class="tmdb-block-head">
+                                <h3>在哪儿看</h3>
+                                <select class="tmdb-region-select" v-model="tmdbRegion" @change="changeTmdbRegion">
+                                    <option v-for="opt in tmdbRegionOptions" :key="opt.code" :value="opt.code">{{ opt.name }}</option>
+                                </select>
+                            </div>
+                            <div v-if="tmdbProviderRows.length" class="tmdb-provider-groups">
+                                <div class="tmdb-provider-group" v-for="group in tmdbProviderRows" :key="group.label">
+                                    <div class="tmdb-provider-label">{{ group.label }}</div>
+                                    <div class="tmdb-provider-list">
+                                        <div class="tmdb-provider" v-for="provider in group.providers" :key="provider.provider_id">
+                                            <img :src="tmdbImg(provider.logo_path, 'w92')" :alt="provider.provider_name" loading="lazy">
+                                            <span>{{ provider.provider_name }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else class="tmdb-no-provider">该地区暂无播放平台数据</div>
+                            <a v-if="tmdbProviders && tmdbProviders.link" :href="tmdbProviders.link" target="_blank" rel="noopener noreferrer" class="tmdb-provider-link">播放平台数据由 JustWatch 提供 <i class="fas fa-arrow-up-right-from-square"></i></a>
+                        </div>
+
+                        <div class="tmdb-block" v-if="tmdbRecommendations.length">
+                            <h3>相似推荐</h3>
+                            <div class="tmdb-rec-row">
+                                <div class="tmdb-rec-card" v-for="rec in tmdbRecommendations" :key="rec.id" @click.stop="openTmdb(rec, tmdbType)">
+                                    <div class="tmdb-rec-poster">
+                                        <img :src="tmdbImg(rec.poster_path, 'w185')" :alt="tmdbTitleText(rec)" loading="lazy">
+                                    </div>
+                                    <div class="tmdb-rec-name">{{ tmdbTitleText(rec) }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -322,6 +521,21 @@
         const TMDB_BASE_URL = "/tmdb/3";
         const TMDB_IMG_URL = "/tmdb/t/p/w500";
         const TMDB_BACKDROP_URL = "/tmdb/t/p/original";
+        const TMDB_REGION_OPTIONS = [
+            { code: 'CN', name: '中国大陆' },
+            { code: 'HK', name: '中国香港' },
+            { code: 'TW', name: '中国台湾' },
+            { code: 'AT', name: '奥地利' },
+            { code: 'US', name: '美国' },
+            { code: 'GB', name: '英国' },
+            { code: 'JP', name: '日本' },
+            { code: 'KR', name: '韩国' }
+        ];
+
+        function detectTmdbRegion() {
+            const region = String(navigator.language || 'zh-CN').split('-')[1] || 'CN';
+            return TMDB_REGION_OPTIONS.some(opt => opt.code === region.toUpperCase()) ? region.toUpperCase() : 'CN';
+        }
 
         let dp = null;
 
@@ -467,16 +681,27 @@
                 return {
                     keyword: '', loading: false, searched: false, rawList: [],
                     movieList: [], tvList: [], list_cn: [], list_krjp: [], list_hktw: [],
+                    nowPlayingList: [], topRatedList: [], airingTodayList: [],
                     showDetail: false, currentGroup: null, currentSource: null,
                     episodeList: [], currentUrl: '', loadingDetail: false,
                     imageMap: {}, fallbackMap: {}, heroList: [], scrollY: 0,
                     hotList: [],
                     activeTab: 'video', cloudEnabled: false, cloudLoading: false,
-                    cloudResults: [], cloudMessage: '', cloudError: ''
+                    cloudResults: [], cloudMessage: '', cloudError: '',
+                    tmdbOpen: false, tmdbLoading: false, tmdbError: '', tmdbInfo: null, tmdbType: 'movie',
+                    tmdbCast: [], tmdbCrew: [], tmdbTrailer: null, tmdbRecommendations: [],
+                    tmdbProviderMap: {}, tmdbProviders: null, tmdbRegion: detectTmdbRegion(),
+                    tmdbRegionOptions: TMDB_REGION_OPTIONS, tmdbRequestSeq: 0,
+                    tmdbAgeRating: '', tmdbKeywords: [], tmdbCollectionParts: []
                 }
             },
             mounted() {
                 window.addEventListener('scroll', () => { this.scrollY = window.scrollY; });
+                window.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Escape') return;
+                    if (this.tmdbOpen) this.closeTmdb();
+                    else if (this.showDetail) this.closeDetail();
+                });
                 this.fetchHero();
                 this.fetchAllLists();
                 this.fetchConfig();
@@ -503,11 +728,159 @@
                         });
                     });
                     return Object.values(groups).sort((a, b) => b.sources.length - a.sources.length);
+                },
+                tmdbProviderRows() {
+                    const providers = this.tmdbProviders || {};
+                    return [
+                        ['flatrate', '订阅'],
+                        ['free', '免费'],
+                        ['ads', '含广告'],
+                        ['rent', '租借'],
+                        ['buy', '购买']
+                    ].map(([key, label]) => ({
+                        label,
+                        providers: (providers[key] || []).filter(Boolean)
+                    })).filter(group => group.providers.length);
+                },
+                tmdbCreditLine() {
+                    if (!this.tmdbInfo) return '';
+                    const names = [];
+                    (this.tmdbInfo.created_by || []).forEach(person => names.push(person.name));
+                    this.tmdbCrew
+                        .filter(person => ['Director', 'Creator', 'Screenplay', 'Writer'].includes(person.job))
+                        .forEach(person => names.push(person.name));
+                    const unique = [...new Set(names.filter(Boolean))];
+                    return unique.length ? '主创：' + unique.slice(0, 6).join('、') : '';
                 }
             },
             methods: {
                 getLatencyClass(ms) { return ms < 500 ? 'dot-green' : (ms < 2000 ? 'dot-yellow' : 'dot-red'); },
                 tmdbImg(path, size = 'w300') { return path ? `/tmdb/t/p/${size}${path}` : ''; },
+                tmdbTitleText(item) { return item ? (item.title || item.name || '未命名') : ''; },
+                tmdbDateText(item) {
+                    const value = item && (item.release_date || item.first_air_date);
+                    return value ? String(value).slice(0, 10) : '';
+                },
+                tmdbRuntimeText(item) {
+                    if (!item) return '';
+                    if (item.runtime) return item.runtime + ' 分钟';
+                    if (item.episode_run_time && item.episode_run_time.length) return '单集 ' + item.episode_run_time[0] + ' 分钟';
+                    if (item.number_of_seasons) return item.number_of_seasons + ' 季 · ' + (item.number_of_episodes || 0) + ' 集';
+                    return '';
+                },
+                tmdbScoreText(item) {
+                    const score = Number(item && item.vote_average) || 0;
+                    return score > 0 ? score.toFixed(1) : '暂无';
+                },
+                tmdbCertification(data, type) {
+                    const results = type === 'tv'
+                        ? data.content_ratings && data.content_ratings.results
+                        : data.release_dates && data.release_dates.results;
+                    if (!Array.isArray(results)) return '';
+                    const region = results.find(item => item.iso_3166_1 === this.tmdbRegion);
+                    if (!region) return '';
+                    if (type === 'tv') return region.rating || '';
+                    const ratings = Array.isArray(region.release_dates) ? region.release_dates : [];
+                    return ratings.map(item => item.certification).find(Boolean) || '';
+                },
+                tmdbKeywordList(data) {
+                    const keywords = data.keywords || {};
+                    const list = keywords.keywords || keywords.results || [];
+                    return Array.isArray(list) ? list.slice(0, 10) : [];
+                },
+                async openTmdb(item, type = 'movie') {
+                    const id = Number(item && item.id);
+                    if (!id) return;
+                    const nextType = type === 'tv' ? 'tv' : 'movie';
+                    const seq = ++this.tmdbRequestSeq;
+                    this.tmdbOpen = true;
+                    this.tmdbLoading = true;
+                    this.tmdbError = '';
+                    this.tmdbInfo = null;
+                    this.tmdbType = nextType;
+                    this.tmdbCast = [];
+                    this.tmdbCrew = [];
+                    this.tmdbTrailer = null;
+                    this.tmdbRecommendations = [];
+                    this.tmdbProviderMap = {};
+                    this.tmdbProviders = null;
+                    this.tmdbAgeRating = '';
+                    this.tmdbKeywords = [];
+                    this.tmdbCollectionParts = [];
+                    document.body.classList.add('tmdb-open');
+
+                    const append = nextType === 'tv'
+                        ? 'credits,videos,watch%2Fproviders,recommendations,external_ids,content_ratings,keywords'
+                        : 'credits,videos,watch%2Fproviders,recommendations,external_ids,release_dates,keywords';
+                    try {
+                        const res = await fetch(`${TMDB_BASE_URL}/${nextType}/${id}?language=zh-CN&append_to_response=${append}&include_video_language=zh-CN%2Cen%2Cnull`);
+                        if (!res.ok) throw new Error('TMDb request failed: ' + res.status);
+                        const data = await res.json();
+                        if (seq !== this.tmdbRequestSeq) return;
+
+                        this.tmdbInfo = data;
+                        this.tmdbCast = ((data.credits && data.credits.cast) || []).slice(0, 12);
+                        this.tmdbCrew = (data.credits && data.credits.crew) || [];
+                        this.tmdbAgeRating = this.tmdbCertification(data, nextType);
+                        this.tmdbKeywords = this.tmdbKeywordList(data);
+
+                        const videos = ((data.videos && data.videos.results) || [])
+                            .filter(video => video.site === 'YouTube' && video.key);
+                        this.tmdbTrailer = videos.find(video => video.type === 'Trailer' && video.official)
+                            || videos.find(video => video.type === 'Trailer')
+                            || videos.find(video => video.type === 'Teaser')
+                            || null;
+
+                        this.tmdbRecommendations = ((data.recommendations && data.recommendations.results) || [])
+                            .filter(rec => rec.id !== id && rec.poster_path)
+                            .slice(0, 12);
+
+                        this.tmdbProviderMap = (data['watch/providers'] && data['watch/providers'].results) || {};
+                        this.syncTmdbProviders();
+
+                        if (data.belongs_to_collection && data.belongs_to_collection.id) {
+                            this.loadTmdbCollection(data.belongs_to_collection, seq);
+                        }
+                    } catch (error) {
+                        if (seq !== this.tmdbRequestSeq) return;
+                        this.tmdbError = 'TMDb 资料加载失败，请稍后重试。';
+                    } finally {
+                        if (seq === this.tmdbRequestSeq) this.tmdbLoading = false;
+                    }
+                },
+                async loadTmdbCollection(collection, seq) {
+                    try {
+                        const res = await fetch(`${TMDB_BASE_URL}/collection/${collection.id}?language=zh-CN`);
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        if (seq !== this.tmdbRequestSeq) return;
+                        this.tmdbCollectionParts = (data.parts || [])
+                            .filter(part => part.id && part.poster_path)
+                            .sort((a, b) => String(a.release_date || '').localeCompare(String(b.release_date || '')))
+                            .slice(0, 12);
+                    } catch (error) {
+                        if (seq === this.tmdbRequestSeq) this.tmdbCollectionParts = [];
+                    }
+                },
+                closeTmdb() {
+                    this.tmdbRequestSeq += 1;
+                    this.tmdbOpen = false;
+                    this.tmdbLoading = false;
+                    document.body.classList.remove('tmdb-open');
+                },
+                changeTmdbRegion() {
+                    this.syncTmdbProviders();
+                    if (this.tmdbInfo) this.tmdbAgeRating = this.tmdbCertification(this.tmdbInfo, this.tmdbType);
+                },
+                syncTmdbProviders() {
+                    this.tmdbProviders = (this.tmdbProviderMap && this.tmdbProviderMap[this.tmdbRegion]) || null;
+                },
+                searchFromTmdb() {
+                    const title = this.tmdbTitleText(this.tmdbInfo);
+                    if (!title) return;
+                    this.closeTmdb();
+                    this.$nextTick(() => this.autoSearch(title));
+                },
                 castVideo() {
                     const videoEl = document.querySelector('.dplayer-video');
                     if (!videoEl) return alert('请先播放视频');
@@ -517,16 +890,29 @@
                 },
 
                 fetchAllLists() {
-                    fetch(`${TMDB_BASE_URL}/trending/movie/week?language=zh-CN`)
-                        .then(res => res.json()).then(data => { if (data.results) this.movieList = data.results; });
-                    fetch(`${TMDB_BASE_URL}/trending/tv/week?language=zh-CN`)
-                        .then(res => res.json()).then(data => { if (data.results) this.tvList = data.results; });
-                    fetch(`${TMDB_BASE_URL}/discover/tv?with_origin_country=CN&sort_by=popularity.desc&language=zh-CN`)
-                        .then(res => res.json()).then(data => { if (data.results) this.list_cn = data.results; });
-                    fetch(`${TMDB_BASE_URL}/discover/tv?with_origin_country=KR|JP&sort_by=popularity.desc&language=zh-CN`)
-                        .then(res => res.json()).then(data => { if (data.results) this.list_krjp = data.results; });
-                    fetch(`${TMDB_BASE_URL}/discover/movie?with_origin_country=HK|TW&sort_by=popularity.desc&language=zh-CN`)
-                        .then(res => res.json()).then(data => { if (data.results) this.list_hktw = data.results; });
+                    const load = (path, key) => fetch(TMDB_BASE_URL + path)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (Array.isArray(data.results)) this[key] = data.results.filter(item => item.poster_path);
+                        })
+                        .catch(() => {});
+                    Promise.all([
+                        load('/trending/movie/week?language=zh-CN', 'movieList'),
+                        load('/trending/tv/week?language=zh-CN', 'tvList'),
+                        load('/discover/tv?with_origin_country=CN&sort_by=popularity.desc&language=zh-CN', 'list_cn'),
+                        load('/discover/tv?with_origin_country=KR|JP&sort_by=popularity.desc&language=zh-CN', 'list_krjp'),
+                        load('/discover/movie?with_origin_country=HK|TW&sort_by=popularity.desc&language=zh-CN', 'list_hktw'),
+                        load(`/movie/now_playing?language=zh-CN&region=${this.tmdbRegion}&page=1`, 'nowPlayingList'),
+                        load('/movie/top_rated?language=zh-CN&page=1', 'topRatedList'),
+                        load('/tv/airing_today?language=zh-CN&timezone=Asia%2FShanghai&page=1', 'airingTodayList')
+                    ]).finally(() => this.refreshHotRows());
+                },
+
+                refreshHotRows() {
+                    this.$nextTick(() => {
+                        initHotRowSwipe();
+                        this.initHotRowNavStates();
+                    });
                 },
 
                 fetchHero() {
@@ -535,6 +921,8 @@
                         .then(data => {
                             if (data.results) {
                                 this.heroList = data.results.filter(i => i.backdrop_path).slice(0, 5).map(item => ({
+                                    id: item.id,
+                                    type: item.media_type === 'tv' ? 'tv' : 'movie',
                                     title: item.title || item.name,
                                     overview: item.overview || '精彩内容不容错过',
                                     backdrop: `${TMDB_BACKDROP_URL}${item.backdrop_path}`
@@ -731,7 +1119,7 @@
                 
                 // 初始化所有热榜导航按钮状态
                 initHotRowNavStates() {
-                    const sections = ['movie', 'tv', 'cn', 'krjp'];
+                    const sections = ['movie', 'tv', 'cn', 'krjp', 'hktw', 'nowplaying', 'toprated', 'airing'];
                     sections.forEach(section => {
                         const hotRow = document.querySelector(`[data-section="${section}"]`);
                         if (hotRow) {
