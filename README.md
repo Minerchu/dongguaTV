@@ -409,3 +409,9 @@ data/                  运行时数据（不提交）
 ## License
 
 MIT License，详见 [LICENSE](LICENSE)。
+
+## Star History
+
+横轴是日期，纵轴是 Star 数，用来展示项目的人气增长，不代表安装量。
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Minerchu/dongguaTV&type=Date)](https://star-history.com/#Minerchu/dongguaTV&Date)
