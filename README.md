@@ -1,5 +1,12 @@
 # 冬瓜TV
 
+[![GitHub Stars](https://img.shields.io/github/stars/Minerchu/dongguaTV?style=flat-square&logo=github&label=Stars)](https://github.com/Minerchu/dongguaTV/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/Minerchu/dongguaTV?style=flat-square&logo=github&label=Forks)](https://github.com/Minerchu/dongguaTV/forks)
+[![Last Commit](https://img.shields.io/github/last-commit/Minerchu/dongguaTV?style=flat-square&label=Last%20Commit)](https://github.com/Minerchu/dongguaTV/commits/main)
+[![License](https://img.shields.io/github/license/Minerchu/dongguaTV?style=flat-square&label=License)](LICENSE)
+
+> Star 和 Fork 由 GitHub 实时更新。GitHub 不公开自建服务的安装次数；Docker Pulls 需要发布 Docker Hub 官方镜像后才会产生。
+
 基于 Node.js 的影视聚合站：TMDb 提供首页推荐和海报，Maccms 采集站提供搜索与播放，PanSou 提供网盘资源搜索。
 
 - 在线教程：https://minerchu.github.io/dongguaTV/
