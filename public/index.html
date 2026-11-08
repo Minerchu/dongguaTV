@@ -94,7 +94,7 @@
                 <div class="hot-row" data-section="movie">
                     <div class="hot-card" v-for="item in movieList" :key="item.id" @click="autoSearch(item.title)">
                         <div class="poster-wrap">
-                            <img :src="'https://daili.smdhb.com/t/p/w300' + item.poster_path" loading="lazy">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                 item.vote_average.toFixed(1) }}</div>
                         </div>
@@ -117,7 +117,7 @@
                 <div class="hot-row" data-section="tv">
                     <div class="hot-card" v-for="item in tvList" :key="item.id" @click="autoSearch(item.name)">
                         <div class="poster-wrap">
-                            <img :src="'https://daili.smdhb.com/t/p/w300' + item.poster_path" loading="lazy">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                 item.vote_average.toFixed(1) }}</div>
                         </div>
@@ -140,7 +140,7 @@
                 <div class="hot-row" data-section="cn">
                     <div class="hot-card" v-for="item in list_cn" :key="item.id" @click="autoSearch(item.name)">
                         <div class="poster-wrap">
-                            <img :src="'https://daili.smdhb.com/t/p/w300' + item.poster_path" loading="lazy">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                 item.vote_average.toFixed(1) }}</div>
                         </div>
@@ -163,7 +163,7 @@
                 <div class="hot-row" data-section="krjp">
                     <div class="hot-card" v-for="item in list_krjp" :key="item.id" @click="autoSearch(item.name)">
                         <div class="poster-wrap">
-                            <img :src="'https://daili.smdhb.com/t/p/w300' + item.poster_path" loading="lazy">
+                            <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
                             <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                 item.vote_average.toFixed(1) }}</div>
                         </div>
@@ -318,14 +318,10 @@
 
     <script>
         const { createApp, reactive } = Vue;
-        // 使用你的反代域名
-        const MY_PROXY = "https://daili.smdhb.com";
-        const TMDB_API_KEY = "替换成你自己的KEY"; 
-
-        // API地址修改为你的反代
-        const TMDB_BASE_URL = `${MY_PROXY}/3`;
-        const TMDB_IMG_URL = `${MY_PROXY}/t/p/w500`;
-        const TMDB_BACKDROP_URL = `${MY_PROXY}/t/p/original`;
+        // TMDb 由服务端 /tmdb 同源代理，前端不保存 Key 或反代域名
+        const TMDB_BASE_URL = "/tmdb/3";
+        const TMDB_IMG_URL = "/tmdb/t/p/w500";
+        const TMDB_BACKDROP_URL = "/tmdb/t/p/original";
 
         let dp = null;
 
@@ -511,6 +507,7 @@
             },
             methods: {
                 getLatencyClass(ms) { return ms < 500 ? 'dot-green' : (ms < 2000 ? 'dot-yellow' : 'dot-red'); },
+                tmdbImg(path, size = 'w300') { return path ? `/tmdb/t/p/${size}${path}` : ''; },
                 castVideo() {
                     const videoEl = document.querySelector('.dplayer-video');
                     if (!videoEl) return alert('请先播放视频');
@@ -520,20 +517,20 @@
                 },
 
                 fetchAllLists() {
-                    fetch(`${TMDB_BASE_URL}/trending/movie/week?api_key=${TMDB_API_KEY}&language=zh-CN`)
+                    fetch(`${TMDB_BASE_URL}/trending/movie/week?language=zh-CN`)
                         .then(res => res.json()).then(data => { if (data.results) this.movieList = data.results; });
-                    fetch(`${TMDB_BASE_URL}/trending/tv/week?api_key=${TMDB_API_KEY}&language=zh-CN`)
+                    fetch(`${TMDB_BASE_URL}/trending/tv/week?language=zh-CN`)
                         .then(res => res.json()).then(data => { if (data.results) this.tvList = data.results; });
-                    fetch(`${TMDB_BASE_URL}/discover/tv?with_origin_country=CN&sort_by=popularity.desc&api_key=${TMDB_API_KEY}&language=zh-CN`)
+                    fetch(`${TMDB_BASE_URL}/discover/tv?with_origin_country=CN&sort_by=popularity.desc&language=zh-CN`)
                         .then(res => res.json()).then(data => { if (data.results) this.list_cn = data.results; });
-                    fetch(`${TMDB_BASE_URL}/discover/tv?with_origin_country=KR|JP&sort_by=popularity.desc&api_key=${TMDB_API_KEY}&language=zh-CN`)
+                    fetch(`${TMDB_BASE_URL}/discover/tv?with_origin_country=KR|JP&sort_by=popularity.desc&language=zh-CN`)
                         .then(res => res.json()).then(data => { if (data.results) this.list_krjp = data.results; });
-                    fetch(`${TMDB_BASE_URL}/discover/movie?with_origin_country=HK|TW&sort_by=popularity.desc&api_key=${TMDB_API_KEY}&language=zh-CN`)
+                    fetch(`${TMDB_BASE_URL}/discover/movie?with_origin_country=HK|TW&sort_by=popularity.desc&language=zh-CN`)
                         .then(res => res.json()).then(data => { if (data.results) this.list_hktw = data.results; });
                 },
 
                 fetchHero() {
-                    fetch(`${TMDB_BASE_URL}/trending/all/week?api_key=${TMDB_API_KEY}&language=zh-CN`)
+                    fetch(`${TMDB_BASE_URL}/trending/all/week?language=zh-CN`)
                         .then(res => res.json())
                         .then(data => {
                             if (data.results) {
@@ -556,7 +553,7 @@
                     if (this.imageMap[name] || this.fallbackMap[name]) return;
                     this.fallbackMap[name] = true;
                     let cleanName = name.replace(/第[0-9一二三四五六七八九十]+[季部]/g, '').replace(/Season\s*\d+/ig, '').replace(/S\d{1,2}/ig, '').replace(/(HD|BD|1080P|720P|4K|202\d|TC|TS).*/i, '').trim();
-                    fetch(`${TMDB_BASE_URL}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(cleanName)}&language=zh-CN`)
+                    fetch(`${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(cleanName)}&language=zh-CN`)
                         .then(res => res.json()).then(data => {
                             if (data.results && data.results.length > 0) {
                                 const found = data.results.find(i => i.poster_path) || data.results[0];

@@ -1,12 +1,9 @@
 #!/bin/sh
 set -e
 
-# 把 TMDB_API_KEY 注入到前端（前端代码里是占位符）
-if [ -n "$TMDB_API_KEY" ]; then
-  echo "[Init] Injecting TMDB_API_KEY into index.html"
-  sed -i "s|const TMDB_API_KEY = \".*\";|const TMDB_API_KEY = \"$TMDB_API_KEY\";|" /app/public/index.html
-else
-  echo "[Init] TMDB_API_KEY not set; front-end will use the placeholder."
+# TMDB_API_KEY 由 server.js 读取，通过 /tmdb 同源代理访问 TMDb，不再写进前端
+if [ -z "$TMDB_API_KEY" ]; then
+  echo "[Warn] TMDB_API_KEY not set; TMDb sections will be empty."
 fi
 
 if [ -z "$ADMIN_PASSWORD" ]; then

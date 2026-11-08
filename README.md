@@ -11,6 +11,7 @@
 - **多源聚合搜索**：并发查询多个 Maccms V10 JSON 接口，同一影片的多条线路自动合并。
 - **线路延迟显示**：详情页对每条线路调用测速接口，用颜色标示响应速度。
 - **TMDb 首页推荐**：本周趋势、华语、日韩、港台等影视列表。
+- **TMDb 同源反代**：内置 `/tmdb` 代理，不需要自己的反代域名，前端也不会暴露 Key。
 - **网盘资源搜索**：接入 [PanSou](https://github.com/fish2018/pansou) 后，搜索结果页增加「网盘资源」标签。
 - **可视化后台**：添加、测试、编辑、启停、删除、批量导入采集站，不用手改文件。
 - **后台使用教程**：内置接口格式、谷歌搜索关键词、验证方法和常见问题。
@@ -71,7 +72,7 @@ cp .env.example .env
 npm start
 ```
 
-非 Docker 部署时，还需要把 `public/index.html` 里的 `TMDB_API_KEY` 改成同一个 Key。
+TMDb Key 由服务端读取，前端不需要修改，也不会把 Key 写进网页源码。
 
 ## 第一次使用
 
@@ -80,6 +81,66 @@ npm start
 3. 在「采集站管理」填写站点名称和 Maccms JSON 接口地址，点「测试并添加」。
 4. 打开「使用教程」可查看接口格式、谷歌搜索关键词和验证方法。
 5. 网盘搜索：Compose / All-in-One 已自动连接 PanSou；Node.js 部署需要在后台「网盘搜索」填写地址，或配置 `PANSOU_URL`。
+
+## TMDb 反代
+
+Docker Compose 和 All-in-One 都已经内置同源反代，**不需要自己的域名、Cloudflare Worker 或其他额外服务**：
+
+- 前端请求 `/tmdb/3/...`，`server.js` 转发到 `https://api.themoviedb.org/3/...`
+- 海报请求 `/tmdb/t/p/...`，`server.js` 转发到 `https://image.tmdb.org/t/p/...`
+- `TMDB_API_KEY` 只保存在服务端，不会出现在浏览器源码里
+
+只需要在 `.env` 或容器环境变量里填 `TMDB_API_KEY`。
+
+如果服务器访问不了 TMDb（例如国内服务器），有两种办法：
+
+1. 在 `.env` 里填写代理：
+
+```env
+HTTPS_PROXY=http://host.docker.internal:7890
+HTTP_PROXY=http://host.docker.internal:7890
+```
+
+`host.docker.internal` 指向宿主机，Compose 已经配置好映射。
+All-in-One 则直接把同样的变量写成 `-e HTTPS_PROXY=...`。
+
+2. 或者使用你自己的反代，把上游地址改掉：
+
+```env
+TMDB_API_BASE=https://你的反代域名/3
+TMDB_IMAGE_BASE=https://你的反代域名/t/p
+```
+
+反代只需要让服务器能访问，不需要处理 CORS（浏览器不会直接请求它）。
+
+### 自己搭一个反代
+
+Cloudflare Worker 示例：
+
+```js
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const isImage = url.pathname.startsWith('/t/p/');
+    const origin = isImage ? 'https://image.tmdb.org' : 'https://api.themoviedb.org';
+    return fetch(origin + url.pathname + url.search);
+  }
+};
+```
+
+Nginx 示例：
+
+```nginx
+location /tmdb-api/ { proxy_pass https://api.themoviedb.org/3/; }
+location /tmdb-img/ { proxy_pass https://image.tmdb.org/t/p/; }
+```
+
+对应配置：
+
+```env
+TMDB_API_BASE=https://你的域名/tmdb-api
+TMDB_IMAGE_BASE=https://你的域名/tmdb-img
+```
 
 ## 修改端口
 
@@ -175,7 +236,11 @@ https://example.com/inc/apijson.php
 | `PORT` | `3000` | Web 服务端口 |
 | `DB_PATH` | `./db.json` | 配置文件路径；Docker 镜像默认 `/app/data/db.json` |
 | `ADMIN_PASSWORD` | `admin` | 后台密码，公网部署必须修改 |
-| `TMDB_API_KEY` | 空 | TMDb Key；Docker 启动时注入到前端 |
+| `TMDB_API_KEY` | 空 | TMDb Key；由服务端 `/tmdb` 代理使用，不暴露到前端 |
+| `TMDB_API_BASE` | `https://api.themoviedb.org/3` | TMDb API 上游，可换成自己的反代 |
+| `TMDB_IMAGE_BASE` | `https://image.tmdb.org/t/p` | TMDb 图片上游，可换成自己的反代 |
+| `TMDB_TIMEOUT` | `15000` | TMDb 请求超时（毫秒） |
+| `TMDB_LANGUAGE` | `zh-CN` | TMDb 默认语言 |
 | `PANSOU_URL` | 空 | PanSou 地址，例如 `http://pansou:8888` |
 | `PANSOU_TOKEN` | 空 | PanSou 开启认证时的 Token |
 | `PANSOU_USER` / `PANSOU_PASS` | 空 | 用账号密码自动换取 Token |
@@ -247,7 +312,7 @@ POST   /api/admin/pansou/test
 ## 项目结构
 
 ```text
-server.js              Express 服务、采集站代理、PanSou 转发、后台鉴权
+server.js              Express 服务、TMDb / 采集站 / PanSou 代理、后台鉴权
 public/index.html      前台页面
 public/admin.html      后台页面
 public/style.css       前台样式
@@ -280,6 +345,10 @@ data/                  运行时数据（不提交）
 ### 网盘搜索显示不可用？
 
 检查 PanSou 是否运行、服务器能否访问 Telegram、代理是否正确。Compose 默认使用内部地址 `http://pansou:8888`。
+
+### TMDb 首页没有内容？
+
+确认 `.env` 里填了 `TMDB_API_KEY`。如果服务器访问不了 TMDb，配置 `HTTPS_PROXY`，或把 `TMDB_API_BASE` / `TMDB_IMAGE_BASE` 换成你的反代地址。
 
 ### 更新后采集站不见了？
 

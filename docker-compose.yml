@@ -5,6 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: dongguatv
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       # 左边是宿主机端口，右边是容器端口；只想换访问端口时改左边即可
       - "3000:3000"
@@ -15,6 +17,11 @@ services:
       - PORT=3000
       - DB_PATH=/app/data/db.json
       - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TMDB_API_BASE=${TMDB_API_BASE:-https://api.themoviedb.org/3}
+      - TMDB_IMAGE_BASE=${TMDB_IMAGE_BASE:-https://image.tmdb.org/t/p}
+      # 服务器无法直连 TMDb 时，在 .env 里填写代理即可
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - HTTP_PROXY=${HTTP_PROXY:-}
       # 生产环境务必修改（也可以在 .env 里设置）
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       # 和下面的 pansou 服务在同一个 compose 网络里
@@ -34,6 +41,8 @@ services:
     image: ghcr.io/fish2018/pansou:latest
     container_name: pansou
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # 服务器无法直连 Telegram 时，取消注释并填代理：
     # environment:
     #   - PROXY=socks5://host.docker.internal:7890

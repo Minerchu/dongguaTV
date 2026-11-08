@@ -19,6 +19,11 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
 const TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT) || 5000;
 const PANSOU_TIMEOUT = Number(process.env.PANSOU_TIMEOUT) || 15000;
+const TMDB_API_KEY = (process.env.TMDB_API_KEY || '').trim();
+const TMDB_API_BASE = (process.env.TMDB_API_BASE || 'https://api.themoviedb.org/3').replace(/\/+$/, '');
+const TMDB_IMAGE_BASE = (process.env.TMDB_IMAGE_BASE || 'https://image.tmdb.org/t/p').replace(/\/+$/, '');
+const TMDB_TIMEOUT = Number(process.env.TMDB_TIMEOUT) || 15000;
+const TMDB_LANGUAGE = process.env.TMDB_LANGUAGE || 'zh-CN';
 const SEARCH_CACHE_TTL = 60 * 1000;
 const SESSION_TTL = 24 * 60 * 60 * 1000;
 
@@ -263,6 +268,48 @@ function normalizePansou(data, wd) {
     }
     return { enabled: true, query: wd, total: list.length, types, list: list.slice(0, 200) };
 }
+
+// ========== TMDb 同源代理 ==========
+// 前端只请求本站的 /tmdb，Key 和上游地址都留在服务端，不暴露给浏览器。
+app.get('/tmdb/3/*', async (req, res) => {
+    if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY 未配置' });
+    const pathPart = String(req.params[0] || '').replace(/^\/+/, '');
+    if (!pathPart || pathPart.includes('..')) return res.status(400).json({ error: '无效的 TMDb 路径' });
+    const params = Object.assign({}, req.query);
+    delete params.api_key;
+    params.api_key = TMDB_API_KEY;
+    if (!params.language) params.language = TMDB_LANGUAGE;
+    try {
+        const upstream = await axios.get(TMDB_API_BASE + '/' + pathPart, {
+            params,
+            timeout: TMDB_TIMEOUT,
+            validateStatus: () => true
+        });
+        res.status(upstream.status);
+        res.set('Cache-Control', upstream.status >= 200 && upstream.status < 300 ? 'public, max-age=300' : 'no-store');
+        res.json(upstream.data);
+    } catch (e) {
+        res.status(502).json({ error: 'TMDb 请求失败' });
+    }
+});
+
+app.get('/tmdb/t/p/*', async (req, res) => {
+    const pathPart = String(req.params[0] || '').replace(/^\/+/, '');
+    if (!/^[A-Za-z0-9/_.-]+$/.test(pathPart) || pathPart.includes('..')) return res.status(400).end();
+    try {
+        const upstream = await axios.get(TMDB_IMAGE_BASE + '/' + pathPart, {
+            responseType: 'stream',
+            timeout: TMDB_TIMEOUT,
+            validateStatus: () => true
+        });
+        res.status(upstream.status);
+        res.set('Content-Type', upstream.headers['content-type'] || 'image/jpeg');
+        res.set('Cache-Control', upstream.status >= 200 && upstream.status < 300 ? 'public, max-age=86400' : 'no-store');
+        upstream.data.pipe(res);
+    } catch (e) {
+        res.status(502).end();
+    }
+});
 
 // ========== 公共 API ==========
 app.get('/api/config', (req, res) => {

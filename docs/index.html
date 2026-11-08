@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>冬瓜TV 部署与使用教程</title>
-<meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索配置教程。">
+<meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索和 TMDb 反代教程。">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍉</text></svg>">
 </head>
@@ -24,8 +24,9 @@
             <a href="#first-run">三、首次使用</a>
             <a href="#sites">四、添加采集站</a>
             <a href="#pansou">五、网盘搜索</a>
-            <a href="#api">六、API 一览</a>
-            <a href="#faq">七、常见问题</a>
+            <a href="#tmdb">六、TMDb 反代</a>
+            <a href="#api">七、API 一览</a>
+            <a href="#faq">八、常见问题</a>
             <a href="#notice">免责声明</a>
         </nav>
     </aside>
@@ -36,7 +37,7 @@
             <h1>冬瓜TV 部署与使用教程</h1>
             <p>从零开始部署，到后台添加采集站、开启网盘搜索，一步一步来。</p>
             <div class="hero-tags">
-                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span>
+                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>TMDb 同源反代</span>
             </div>
             <div class="note">
                 本页只是静态教程，不运行任何后端。仓库和正式版本里<strong>不包含任何采集站地址</strong>，
@@ -83,13 +84,12 @@ docker run -d --name dongguatv \
 cp .env.example .env
 # 编辑 .env，至少填写 TMDB_API_KEY 和 ADMIN_PASSWORD
 npm start</code></pre>
-            <p>需要 Node.js 18 以上（推荐 20 / 22）。非 Docker 部署时，前端需要手动把
-            <code>public/index.html</code> 里的 <code>TMDB_API_KEY</code> 改成同一个 Key。</p>
+            <p>需要 Node.js 18 以上（推荐 20 / 22）。TMDb Key 由服务端读取，不需要改前端。</p>
 
             <h3>需要准备的东西</h3>
             <table>
                 <tr><th>项目</th><th>是否必须</th><th>说明</th></tr>
-                <tr><td>TMDb API Key</td><td>必须</td><td>到 TMDb 官网申请，用于海报、简介、评分</td></tr>
+                <tr><td>TMDb API Key</td><td>必须</td><td>到 TMDb 官网申请；反代已内置，不需要自备域名</td></tr>
                 <tr><td>采集站接口</td><td>必须</td><td>在后台自行添加，格式见第四节</td></tr>
                 <tr><td>PanSou</td><td>可选</td><td>网盘搜索；compose / all-in-one 已经内置</td></tr>
             </table>
@@ -269,15 +269,62 @@ PANSOU_URL=http://你的地址:8888</code></pre>
             <a href="https://github.com/fish2018/pansou" target="_blank" rel="noopener">PanSou 文档</a>。</p>
         </section>
 
+        <section id="tmdb">
+            <h2>六、TMDb 反代</h2>
+            <p>前端不会再请求任何人的私人域名。服务端内置了 <code>/tmdb</code> 同源代理：</p>
+            <ul>
+                <li>前端 <code>/tmdb/3/...</code> → <code>https://api.themoviedb.org/3/...</code></li>
+                <li>海报 <code>/tmdb/t/p/...</code> → <code>https://image.tmdb.org/t/p/...</code></li>
+                <li><code>TMDB_API_KEY</code> 只保存在服务端，不会出现在网页源码里</li>
+            </ul>
+            <div class="note">
+                Docker Compose 和 All-in-One 已经集成好了，<strong>不需要买域名、搭 Cloudflare Worker 或额外反代服务</strong>。
+                只需要在 <code>.env</code> 里填 <code>TMDB_API_KEY</code>。
+            </div>
+
+            <h3>服务器访问不了 TMDb 怎么办？</h3>
+            <p>在 <code>.env</code> 里填写代理：</p>
+<pre><code>HTTPS_PROXY=http://host.docker.internal:7890
+HTTP_PROXY=http://host.docker.internal:7890</code></pre>
+            <p><code>host.docker.internal</code> 指向宿主机，Compose 已经配置好映射。</p>
+            <p>All-in-One 则直接把同样的变量写成 <code>-e HTTPS_PROXY=...</code>。</p>
+            <p>或者把上游地址换成你自己的反代：</p>
+<pre><code>TMDB_API_BASE=https://你的反代域名/3
+TMDB_IMAGE_BASE=https://你的反代域名/t/p</code></pre>
+            <p>反代只需要服务器能访问即可，不需要处理 CORS。</p>
+
+            <h3>自己搭一个反代</h3>
+            <p>Cloudflare Worker 示例：</p>
+<pre><code>export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    const isImage = url.pathname.startsWith('/t/p/');
+    const origin = isImage ? 'https://image.tmdb.org' : 'https://api.themoviedb.org';
+    return fetch(origin + url.pathname + url.search);
+  }
+};</code></pre>
+            <p>Nginx 示例：</p>
+<pre><code>location /tmdb-api/ { proxy_pass https://api.themoviedb.org/3/; }
+location /tmdb-img/ { proxy_pass https://image.tmdb.org/t/p/; }</code></pre>
+            <p>然后填写：</p>
+<pre><code>TMDB_API_BASE=https://你的域名/tmdb-api
+TMDB_IMAGE_BASE=https://你的域名/tmdb-img</code></pre>
+        </section>
+
         <section id="api">
-            <h2>六、API 一览</h2>
+            <h2>七、API 一览</h2>
             <p>这些是本项目自己的接口，供前端或二次开发使用：</p>
 <pre><code>GET  /api/config                     # 前台配置
 GET  /api/search?wd=关键词            # 聚合搜索（影视）
+GET  /api/sites                      # 站点列表（含启用状态）
 GET  /api/cloud/search?wd=关键词      # 网盘搜索
 GET  /api/detail?site_key=站点key&amp;id=影片ID
-GET  /api/hot                        # 热门推荐
-GET  /api/check?key=站点key           # 站点测速</code></pre>
+GET  /api/hot                        # 最近 24 小时更新
+GET  /api/check?key=站点key           # 站点测速
+
+# TMDb 同源代理（服务端注入 Key）
+GET  /tmdb/3/*
+GET  /tmdb/t/p/*</code></pre>
             <p>管理接口需要先登录（HttpOnly Cookie 或 <code>X-Admin-Token</code>）：</p>
 <pre><code>POST   /api/admin/login
 GET    /api/admin/sites
@@ -291,7 +338,7 @@ POST   /api/admin/pansou/test</code></pre>
         </section>
 
         <section id="faq">
-            <h2>七、常见问题</h2>
+            <h2>八、常见问题</h2>
             <details>
                 <summary>启动后搜索没有任何结果？</summary>
                 <p>先确认后台已经添加了采集站并且处于「启用」状态。新安装默认是空的。</p>
@@ -311,6 +358,12 @@ POST   /api/admin/pansou/test</code></pre>
             <details>
                 <summary>网盘搜索显示暂不可用？</summary>
                 <p>检查 pansou 容器是否在运行、服务器能否访问 Telegram、代理是否正确。</p>
+            </details>
+            <details>
+                <summary>TMDb 首页没有内容？</summary>
+                <p>确认 <code>.env</code> 里填了 <code>TMDB_API_KEY</code>。如果服务器访问不了 TMDb，
+                配置 <code>HTTPS_PROXY</code>，或把 <code>TMDB_API_BASE</code> / <code>TMDB_IMAGE_BASE</code>
+                换成你自己的反代地址。</p>
             </details>
             <details>
                 <summary>更新版本后站点数据会丢吗？</summary>
