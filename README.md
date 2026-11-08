@@ -15,6 +15,8 @@
 - 🎨 **简洁界面** - 响应式设计，支持PC/移动端完美适配
 - 🔐 **后台管理** - 支持站点开关配置，自定义资源源
 - 📊 **数据持久化** - JSON数据库存储，支持自定义配置
+- 🛠️ **后台可视化配置** - 不用改文件，浏览器里就能添加/测试/删除采集站，内置图文教程
+- ☁️ **网盘资源搜索** - 接入 PanSou 后，搜索影视时同步返回夸克、百度、阿里、UC 等网盘资源
 
 ## 🚀 快速开始
 
@@ -31,9 +33,9 @@ cd dongguaTV
 # 安装依赖
 npm install
 
-# 配置TMDB_API_KEY 编辑 index.html 
-const TMDB_API_KEY = "替换成你自己的KEY"; 
-# 配置 TMDB_API_KEY 为你自己的TMDb API密钥
+# 复制配置模板，按需填写
+cp .env.example .env
+# 至少填 TMDB_API_KEY（前端还需要把 public/index.html 里的 TMDB_API_KEY 改成同一个 Key）
 
 # 启动服务
 npm start
@@ -52,35 +54,39 @@ docker compose up -d --build
 ### 访问应用
 - 前端页面: http://localhost:3000
 - 后台管理: http://localhost:3000/admin.html
-- 管理员密码: `admin`
+- 管理员密码: `admin`（生产环境请用 `ADMIN_PASSWORD` 环境变量修改）
+
+### 后台怎么用
+1. 打开 `/admin.html`，输入管理员密码登录
+2. 在「采集站管理」里填站点名称 + Maccms JSON 接口地址，点「测试并添加」
+3. 不知道去哪找接口？点「使用教程」，里面写了谷歌搜索关键词、接口格式和验证方法
+4. 想开网盘搜索？在「网盘搜索」页填 PanSou 地址并保存
 
 ## 📡 API接口
 
-### 搜索接口
+### 公共接口
 ```
-GET /api/search?wd=关键词
-```
-
-### 详情接口
-```
-GET /api/detail?site_key=站点key&id=影片ID
-```
-
-### 热门推荐
-```
-GET /api/hot
+GET  /api/config                     # 前台配置（是否开启网盘搜索、启用站点数）
+GET  /api/search?wd=关键词            # 聚合搜索（影视）
+GET  /api/cloud/search?wd=关键词      # 网盘搜索（需配置 PanSou）
+GET  /api/detail?site_key=站点key&id=影片ID
+GET  /api/hot                        # 热门推荐
+GET  /api/check?key=站点key           # 站点测速
 ```
 
-### 站点测速
+### 管理接口（需登录，使用 Cookie 或 X-Admin-Token）
 ```
-GET /api/check?key=站点key
-```
-
-### 管理接口
-```
-POST /api/admin/login              # 管理员登录
-GET  /api/admin/sites              # 获取站点配置
-POST /api/admin/sites              # 更新站点配置
+POST   /api/admin/login              # 登录，返回 token 并写入 HttpOnly Cookie
+POST   /api/admin/logout
+GET    /api/admin/sites              # 站点列表 + 网盘设置
+POST   /api/admin/sites              # 新增站点（test=true 时先测连通性）
+PUT    /api/admin/sites/:key         # 修改站点 / 启用状态 / 标识
+DELETE /api/admin/sites/:key         # 删除站点
+POST   /api/admin/sites/test         # 测试任意 Maccms 接口
+POST   /api/admin/sites/import       # 批量导入
+POST   /api/admin/sites/reset-defaults
+PUT    /api/admin/settings           # 保存 PanSou 地址 / Token / 开关
+POST   /api/admin/pansou/test        # 测试 PanSou 连通性
 ```
 
 ## 🎛️ 内置站点
@@ -101,15 +107,26 @@ POST /api/admin/sites              # 更新站点配置
 
 ## 🔧 配置说明
 
-### 环境配置
-```javascript
-const PORT = 3000;              // 服务端口
-const ADMIN_PASSWORD = "admin"; // 管理员密码
-const FORCE_UPDATE = true;      // 是否强制更新站点配置
-```
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | `3000` | 服务端口 |
+| `ADMIN_PASSWORD` | `admin` | 后台管理员密码，**生产环境务必修改** |
+| `TMDB_API_KEY` | 无 | TMDb API Key（Docker 启动时会注入到 index.html） |
+| `PANSOU_URL` | 无 | PanSou 服务地址，例如 `http://127.0.0.1:8888` |
+| `PANSOU_TOKEN` | 无 | PanSou 开启认证时的访问 Token |
+| `PANSOU_USER` / `PANSOU_PASS` | 无 | 也可用账号密码自动换取 Token |
+| `SEARCH_TIMEOUT` | `6000` | 单站搜索超时（毫秒） |
+| `TEST_TIMEOUT` | `5000` | 接口测试超时（毫秒） |
+| `PANSOU_TIMEOUT` | `15000` | 网盘搜索超时（毫秒） |
+
+后台里保存的 PanSou 地址/Token 会写入 `db.json`，`PANSOU_URL` 环境变量优先级更高。
 
 ### 站点配置
-站点配置存储在 `db.json` 文件中，包含以下字段：
+站点配置保存在 `db.json`，正常情况下**不需要手动改文件**，请在后台增删改。
+如需迁移或备份，可直接复制 `db.json`。
+
 ```json
 {
   "sites": [
@@ -119,9 +136,30 @@ const FORCE_UPDATE = true;      // 是否强制更新站点配置
       "api": "https://api.ffzyapi.com/api.php/provide/vod",
       "active": true
     }
-  ]
+  ],
+  "settings": {
+    "pansouUrl": "",
+    "pansouToken": "",
+    "pansouEnabled": true
+  }
 }
 ```
+
+## ☁️ 网盘搜索（PanSou）
+
+本项目本身不提供网盘资源，只做接口聚合。先部署 [fish2018/pansou](https://github.com/fish2018/pansou)：
+
+```bash
+docker run -d --name pansou -p 8888:8888 ghcr.io/fish2018/pansou:latest
+```
+
+然后二选一：
+
+- 后台 →「网盘搜索」→ 填 `http://服务器IP:8888` → 测试连接 → 保存配置
+- 或设置环境变量 `PANSOU_URL=http://服务器IP:8888`
+
+用户搜索时会多出「网盘资源」标签页，展示网盘类型、标题、提取码和分享链接。
+如果 PanSou 开启了认证（`AUTH_ENABLED=true`），请在后台填 Token，或配置 `PANSOU_USER` / `PANSOU_PASS`。
 
 ## 🛠️ 技术栈
 
@@ -141,13 +179,14 @@ const FORCE_UPDATE = true;      // 是否强制更新站点配置
 - 详情页面：展示影片详细信息和播放链接
 
 ### 管理后台
-- 站点管理：开关各资源站点
-- 配置管理：自定义API接口
-- 系统状态：查看服务运行状态
+- 采集站管理：添加 / 测速 / 启用 / 删除 / 批量导入 / 导出
+- 使用教程：怎么搜采集站、怎么判断 Maccms 接口、常见问题
+- 网盘搜索：PanSou 地址与 Token 配置、连通性测试
 
 ## 🔒 安全说明
 
-- 建议修改默认管理员密码
+- 必须修改默认管理员密码（`ADMIN_PASSWORD`）
+- 管理接口已加登录校验，未登录无法读取或修改站点配置
 - 生产环境建议使用Nginx反向代理
 - 定期更新依赖包以确保安全性
 

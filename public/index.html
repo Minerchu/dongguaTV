@@ -184,11 +184,20 @@
                 <button class="btn btn-sm btn-outline-secondary" @click="clearSearch">清除搜索 X</button>
             </div>
 
+            <div class="result-tabs" v-if="!loading">
+                <button class="result-tab" :class="{ active: activeTab === 'video' }" @click="activeTab = 'video'">
+                    <i class="fas fa-film"></i> 影视资源 <span class="tab-count">{{ groupedList.length }}</span>
+                </button>
+                <button v-if="cloudEnabled" class="result-tab" :class="{ active: activeTab === 'cloud' }" @click="activeTab = 'cloud'">
+                    <i class="fas fa-cloud"></i> 网盘资源 <span class="tab-count">{{ cloudLoading ? '...' : cloudResults.length }}</span>
+                </button>
+            </div>
+
             <div v-if="loading" class="text-center py-5">
                 <div class="spinner-border text-danger"></div>
             </div>
 
-            <div class="result-grid" v-if="!loading">
+            <div class="result-grid" v-if="!loading && activeTab === 'video'">
                 <div class="result-card" v-for="group in groupedList" :key="group.name" @click="openDetail(group)">
                     <div class="poster-wrap">
                         <img v-if="!isFallback(group.name)" :src="finalPoster(group)" :key="finalPoster(group)"
@@ -204,8 +213,42 @@
                 </div>
             </div>
 
-            <div v-if="!loading && groupedList.length === 0" class="text-center text-muted py-5">
-                未找到相关内容，请尝试更换关键词
+            <div v-if="!loading && activeTab === 'video' && groupedList.length === 0" class="text-center text-muted py-5">
+                未找到影视资源，请尝试更换关键词
+            </div>
+
+            <!-- 网盘资源 -->
+            <div v-if="!loading && activeTab === 'cloud'" class="cloud-panel">
+                <div v-if="cloudLoading" class="text-center py-4">
+                    <div class="spinner-border spinner-border-sm text-danger"></div>
+                    <div class="small text-muted mt-2">正在搜索网盘资源...</div>
+                </div>
+                <div v-else-if="cloudError" class="cloud-empty">{{ cloudError }}</div>
+                <div v-else-if="cloudResults.length === 0" class="cloud-empty">
+                    {{ cloudMessage || '未找到网盘资源，换个关键词试试' }}
+                </div>
+                <div v-else class="cloud-list">
+                    <div class="cloud-item" v-for="(item, idx) in cloudResults" :key="idx">
+                        <div class="cloud-head">
+                            <span class="disk-badge" :class="'disk-' + item.type">{{ diskLabel(item.type) }}</span>
+                            <div class="cloud-title" :title="item.title">{{ item.title }}</div>
+                            <span class="cloud-date" v-if="item.datetime">{{ formatDate(item.datetime) }}</span>
+                        </div>
+                        <div class="cloud-content" v-if="item.content">{{ item.content }}</div>
+                        <div class="cloud-foot">
+                            <span class="cloud-tags" v-if="item.tags && item.tags.length">
+                                <span class="tag-mini" v-for="tag in item.tags" :key="tag">{{ tag }}</span>
+                            </span>
+                            <div class="cloud-actions">
+                                <span v-if="item.password" class="pwd">提取码 <b>{{ item.password }}</b></span>
+                                <button v-if="item.password" class="btn-copy" @click="copyText(item.password)">复制</button>
+                                <a :href="item.url" target="_blank" rel="noopener noreferrer" class="btn-open">
+                                    打开链接 <i class="fas fa-arrow-up-right-from-square"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -431,13 +474,16 @@
                     showDetail: false, currentGroup: null, currentSource: null,
                     episodeList: [], currentUrl: '', loadingDetail: false,
                     imageMap: {}, fallbackMap: {}, heroList: [], scrollY: 0,
-                    hotList: []
+                    hotList: [],
+                    activeTab: 'video', cloudEnabled: false, cloudLoading: false,
+                    cloudResults: [], cloudMessage: '', cloudError: ''
                 }
             },
             mounted() {
                 window.addEventListener('scroll', () => { this.scrollY = window.scrollY; });
                 this.fetchHero();
                 this.fetchAllLists();
+                this.fetchConfig();
                 
                 // 初始化热榜滑动功能
                 this.$nextTick(() => {
@@ -529,14 +575,28 @@
                         document.getElementById('search-result-anchor').scrollIntoView({ behavior: 'smooth' });
                     }, 100);
                 },
-                clearSearch() { this.searched = false; this.keyword = ''; this.rawList = []; },
+                clearSearch() { this.searched = false; this.keyword = ''; this.rawList = []; this.activeTab = 'video'; this.cloudResults = []; this.cloudError = ''; },
+                async fetchConfig() {
+                    try {
+                        const res = await fetch('/api/config');
+                        const data = await res.json();
+                        this.cloudEnabled = Boolean(data.cloudEnabled);
+                    } catch (e) { this.cloudEnabled = false; }
+                },
                 async doSearch() {
                     if (!this.keyword) return;
+                    const kw = this.keyword;
                     this.loading = true;
                     this.searched = true;
                     this.rawList = [];
+                    this.activeTab = 'video';
+                    this.cloudResults = [];
+                    this.cloudMessage = '';
+                    this.cloudError = '';
+                    this.cloudLoading = this.cloudEnabled;
+                    const cloudPromise = this.searchCloud(kw);
                     try {
-                        const res = await fetch(`/api/search?wd=${encodeURIComponent(this.keyword)}`);
+                        const res = await fetch(`/api/search?wd=${encodeURIComponent(kw)}`);
                         const data = await res.json();
                         this.rawList = data.list || [];
                         this.rawList.forEach(item => {
@@ -544,6 +604,51 @@
                         });
                     } catch (e) { }
                     this.loading = false;
+                    await cloudPromise;
+                },
+                async searchCloud(kw) {
+                    if (!this.cloudEnabled) { this.cloudLoading = false; return; }
+                    try {
+                        const res = await fetch(`/api/cloud/search?wd=${encodeURIComponent(kw)}`);
+                        const data = await res.json();
+                        if (data.enabled === false) {
+                            this.cloudEnabled = false;
+                        } else {
+                            this.cloudResults = data.list || [];
+                            this.cloudMessage = data.message || '';
+                            this.cloudError = data.error || '';
+                        }
+                    } catch (e) {
+                        this.cloudError = '网盘搜索请求失败';
+                    }
+                    this.cloudLoading = false;
+                },
+                diskLabel(type) {
+                    const map = {
+                        baidu: '百度网盘', aliyun: '阿里云盘', quark: '夸克网盘', uc: 'UC网盘',
+                        tianyi: '天翼云盘', mobile: '移动云盘', '115': '115网盘', pikpak: 'PikPak',
+                        xunlei: '迅雷网盘', '123': '123网盘', guangya: '光鸭云盘',
+                        magnet: '磁力链接', ed2k: '电驴链接', others: '其他网盘'
+                    };
+                    return map[type] || '网盘';
+                },
+                formatDate(value) {
+                    if (!value) return '';
+                    const d = new Date(value);
+                    if (isNaN(d.getTime())) return String(value).slice(0, 10);
+                    const now = Date.now();
+                    const diff = now - d.getTime();
+                    if (diff >= 0 && diff < 24 * 3600 * 1000) return '今天';
+                    if (diff >= 0 && diff < 48 * 3600 * 1000) return '昨天';
+                    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                },
+                copyText(text) {
+                    if (!text) return;
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(() => alert('已复制：' + text)).catch(() => prompt('请手动复制', text));
+                    } else {
+                        prompt('请手动复制', text);
+                    }
                 },
                 openDetail(group) {
                     this.currentGroup = group;

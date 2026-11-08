@@ -719,3 +719,209 @@ body {
     margin-top: 80px;
     padding-bottom: 20px;
 }
+
+/* ===== 搜索结果分类标签 ===== */
+.result-tabs {
+    display: flex;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 22px;
+}
+
+.result-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-sub);
+    font-size: 15px;
+    padding: 10px 6px;
+    margin-bottom: -1px;
+    cursor: pointer;
+    transition: color .2s, border-color .2s;
+}
+
+.result-tab:hover { color: #fff; }
+
+.result-tab.active {
+    color: #fff;
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+}
+
+.result-tab i { margin-right: 6px; }
+
+.tab-count {
+    display: inline-block;
+    min-width: 20px;
+    padding: 1px 7px;
+    margin-left: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #bbb;
+    font-size: 11px;
+    font-weight: 400;
+    text-align: center;
+}
+
+.result-tab.active .tab-count {
+    background: rgba(229, 9, 20, 0.18);
+    color: #ff6b6b;
+}
+
+/* ===== 网盘资源列表 ===== */
+.cloud-panel { margin-top: 4px; }
+
+.cloud-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.cloud-item {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 13px 16px;
+    transition: border-color .2s, transform .2s;
+}
+
+.cloud-item:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.cloud-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.disk-badge {
+    flex: none;
+    font-size: 11px;
+    line-height: 1;
+    padding: 5px 9px;
+    border-radius: 5px;
+    color: #fff;
+    background: #555;
+    white-space: nowrap;
+}
+
+.disk-baidu { background: #2932e1; }
+.disk-aliyun { background: #ff6a00; }
+.disk-quark { background: #6c5ce7; }
+.disk-uc { background: #ff7a00; }
+.disk-tianyi { background: #009688; }
+.disk-mobile { background: #0086d1; }
+.disk-115 { background: #1e88e5; }
+.disk-pikpak { background: #00a86b; }
+.disk-xunlei { background: #00a1d6; }
+.disk-123 { background: #ff5722; }
+.disk-guangya { background: #8e44ad; }
+.disk-magnet { background: #e50914; }
+.disk-ed2k { background: #607d8b; }
+.disk-others { background: #555; }
+
+.cloud-title {
+    flex: 1;
+    min-width: 0;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cloud-date {
+    flex: none;
+    color: #777;
+    font-size: 12px;
+}
+
+.cloud-content {
+    color: #9a9a9a;
+    font-size: 13px;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.cloud-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.cloud-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.tag-mini {
+    font-size: 11px;
+    color: #8f8f8f;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    padding: 2px 7px;
+}
+
+.cloud-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.cloud-actions .pwd {
+    color: #ffcc00;
+    font-size: 12px;
+}
+
+.cloud-actions .pwd b {
+    letter-spacing: 1px;
+}
+
+.btn-copy {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ccc;
+    font-size: 12px;
+    border-radius: 5px;
+    padding: 3px 8px;
+    cursor: pointer;
+}
+
+.btn-copy:hover { color: #fff; border-color: #fff; }
+
+.btn-open {
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    border-radius: 5px;
+    padding: 5px 12px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn-open:hover { background: #f6121d; color: #fff; }
+
+.cloud-empty {
+    text-align: center;
+    color: #777;
+    font-size: 14px;
+    padding: 48px 0;
+}
+
+@media (max-width: 576px) {
+    .cloud-title { font-size: 14px; }
+    .cloud-date { display: none; }
+    .cloud-actions { margin-left: 0; }
+}

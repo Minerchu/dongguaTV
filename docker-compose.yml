@@ -10,3 +10,5 @@ services:
     #- PORT=3000
     - TMDB_API_KEY=key
     - ADMIN_PASSWORD=admin
+    # 可选：网盘搜索
+    #- PANSOU_URL=http://pansou:8888

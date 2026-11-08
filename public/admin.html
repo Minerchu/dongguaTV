@@ -1,115 +1,443 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <title>资源接口管理后台</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.2.47/vue.global.prod.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>冬瓜TV · 管理后台</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+<style>
+    :root { --accent:#e50914; --ink:#1f2328; --muted:#6b7280; --line:#e5e7eb; }
+    body { background:#f5f6f8; color:var(--ink); }
+    .brand-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); display:inline-block; }
+    .card { border:1px solid var(--line); border-radius:12px; }
+    .nav-pills .nav-link { color:#555; border-radius:8px; }
+    .nav-pills .nav-link.active { background:var(--accent); }
+    .table > :not(caption) > * > * { padding:.65rem .5rem; vertical-align:middle; }
+    .form-control-sm, .form-select-sm { font-size:13px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .step { counter-increment:step; position:relative; padding-left:44px; margin-bottom:22px; }
+    .step::before { content:counter(step); position:absolute; left:0; top:0; width:30px; height:30px; border-radius:50%;
+        background:var(--accent); color:#fff; font-weight:700; display:flex; align-items:center; justify-content:center; }
+    pre.code { background:#111827; color:#e5e7eb; border-radius:10px; padding:14px 16px; font-size:12.5px; overflow:auto; }
+    .hint { background:#fff7ed; border-left:3px solid #f59e0b; padding:10px 14px; border-radius:6px; font-size:13.5px; }
+    .ok { color:#059669; } .bad { color:#dc2626; }
+    .sticky-tools { position:sticky; top:0; z-index:5; background:#f5f6f8; padding:.75rem 0; }
+    .tag { font-size:11px; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#4338ca; }
+    .site-row td { background:#fff; }
+    .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; }
+</style>
 </head>
-<body class="bg-light">
-
-<div id="app" class="container mt-5">
-    
-    <!-- 登录界面 -->
-    <div v-if="!isLoggedIn" class="card mx-auto shadow" style="max-width: 400px;">
-        <div class="card-body">
-            <h4 class="card-title text-center mb-4">管理员登录</h4>
-            <div class="mb-3">
-                <input type="password" v-model="password" class="form-control" placeholder="请输入密码 (默认 admin)">
+<body>
+<div id="app">
+    <!-- 登录 -->
+    <div v-if="!loggedIn" class="login-wrap">
+        <div class="card shadow-sm p-4" style="width:380px">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="brand-dot"></span><h5 class="mb-0">冬瓜TV 管理后台</h5>
             </div>
-            <button @click="login" class="btn btn-primary w-100">登录</button>
+            <p class="text-muted small mb-4">管理采集站、网盘搜索与使用教程</p>
+            <div class="mb-3">
+                <label class="form-label small text-muted">管理员密码</label>
+                <input type="password" v-model="password" class="form-control" placeholder="默认 admin，建议用 ADMIN_PASSWORD 环境变量修改" @keyup.enter="login">
+            </div>
+            <div v-if="loginError" class="alert alert-danger py-2 small">{{ loginError }}</div>
+            <button class="btn btn-danger w-100" :disabled="loggingIn" @click="login">
+                <i class="fas fa-right-to-bracket me-1"></i>{{ loggingIn ? '登录中...' : '登录' }}
+            </button>
         </div>
     </div>
 
-    <!-- 管理界面 -->
-    <div v-else>
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3>接口源管理</h3>
-            <div>
-                <button class="btn btn-success me-2" @click="addSite">+ 新增接口</button>
-                <button class="btn btn-primary" @click="saveSites">保存配置</button>
+    <!-- 主界面 -->
+    <div v-else class="container py-4" style="max-width:1180px">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <span class="brand-dot"></span>
+                <h4 class="mb-0">冬瓜TV 管理后台</h4>
+                <span class="tag">{{ sites.length }} 个采集站</span>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" @click="logout"><i class="fas fa-right-from-bracket me-1"></i>退出</button>
+        </div>
+
+        <ul class="nav nav-pills gap-2 mb-4">
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='sites'}" @click="tab='sites'"><i class="fas fa-database me-1"></i>采集站管理</button></li>
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='cloud'}" @click="tab='cloud'"><i class="fas fa-cloud me-1"></i>网盘搜索</button></li>
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='guide'}" @click="tab='guide'"><i class="fas fa-circle-question me-1"></i>使用教程</button></li>
+        </ul>
+
+        <!-- 采集站 -->
+        <div v-show="tab==='sites'">
+            <div class="card p-3 mb-3">
+                <h6 class="mb-3"><i class="fas fa-plus text-danger me-1"></i>添加采集站</h6>
+                <div class="row g-2">
+                    <div class="col-md-3"><input class="form-control" v-model.trim="form.name" placeholder="站点名称，如：非凡影视"></div>
+                    <div class="col-md-6"><input class="form-control mono" v-model.trim="form.api" placeholder="https://example.com/api.php/provide/vod"></div>
+                    <div class="col-md-3 d-flex gap-2">
+                        <button class="btn btn-danger flex-fill" :disabled="adding" @click="addSite(true)">
+                            <i class="fas fa-vial me-1"></i>{{ adding ? '检测中...' : '测试并添加' }}
+                        </button>
+                        <button class="btn btn-outline-secondary" :disabled="adding" @click="addSite(false)" title="跳过测试直接添加">直接添加</button>
+                    </div>
+                </div>
+                <div v-if="formResult" class="alert mt-3 mb-0 py-2 small" :class="formResult.ok ? 'alert-success' : 'alert-danger'">
+                    <template v-if="formResult.ok">
+                        <i class="fas fa-circle-check me-1"></i>连接正常，延迟 {{ formResult.latency }}ms，本页返回 {{ formResult.count }} 条数据
+                        <span v-if="formResult.sample && formResult.sample.length" class="text-muted">（示例：{{ formResult.sample.join('、') }}）</span>
+                    </template>
+                    <template v-else><i class="fas fa-circle-xmark me-1"></i>{{ formResult.message || formResult.error }}</template>
+                </div>
+            </div>
+
+            <div class="card p-3 mb-3">
+                <h6 class="mb-2"><i class="fas fa-file-import text-danger me-1"></i>批量导入</h6>
+                <p class="text-muted small mb-2">每行一个，支持「名称,地址」或直接填地址。例如：<code>非凡影视,https://api.ffzyapi.com/api.php/provide/vod</code></p>
+                <textarea class="form-control mono mb-2" rows="3" v-model="importText" placeholder="https://xxx.com/api.php/provide/vod&#10;https://yyy.com/api.php/provide/vod"></textarea>
+                <div class="d-flex gap-2 align-items-center">
+                    <button class="btn btn-outline-danger btn-sm" :disabled="importing" @click="importSites">{{ importing ? '导入中...' : '批量导入' }}</button>
+                    <span v-if="importResult" class="small" :class="importResult.failed ? 'text-warning' : 'ok'">
+                        成功 {{ importResult.added }}，跳过 {{ importResult.skipped }}，失败 {{ importResult.failed }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="sticky-tools d-flex justify-content-between align-items-center">
+                <div class="small text-muted">
+                    共 {{ sites.length }} 个，启用 {{ activeCount }} 个
+                    <span v-if="testingAll" class="ms-2"><i class="fas fa-spinner fa-spin"></i> 正在测速...</span>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary btn-sm" :disabled="testingAll" @click="testAll"><i class="fas fa-gauge-high me-1"></i>全部测速</button>
+                    <button class="btn btn-outline-secondary btn-sm" @click="restoreDefaults"><i class="fas fa-rotate-left me-1"></i>恢复内置站点</button>
+                    <button class="btn btn-outline-secondary btn-sm" @click="exportSites"><i class="fas fa-download me-1"></i>导出</button>
+                </div>
+            </div>
+
+            <div class="card overflow-hidden">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:90px">状态</th>
+                                <th style="width:170px">名称</th>
+                                <th style="width:120px">标识</th>
+                                <th>API 地址</th>
+                                <th style="width:70px">启用</th>
+                                <th style="width:190px">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="site in sites" :key="site.key" class="site-row">
+                                <td>
+                                    <span v-if="status[site.key]" class="small" :class="status[site.key].ok ? 'ok' : 'bad'">
+                                        <i class="fas" :class="status[site.key].ok ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                        {{ status[site.key].ok ? (status[site.key].latency + 'ms') : '不可用' }}
+                                    </span>
+                                    <span v-else class="text-muted small">未测试</span>
+                                </td>
+                                <td><input class="form-control form-control-sm" v-model="site.name"></td>
+                                <td><input class="form-control form-control-sm mono" v-model="site.key"></td>
+                                <td><input class="form-control form-control-sm mono" v-model="site.api"></td>
+                                <td>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" v-model="site.active">
+                                    </div>
+                                </td>
+                                <td class="text-nowrap">
+                                    <button class="btn btn-outline-secondary btn-sm" :disabled="status[site.key] && status[site.key].loading" @click="testOne(site)" title="测试连接">
+                                        <i class="fas fa-vial"></i>
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-sm" @click="saveSite(site)" title="保存修改"><i class="fas fa-floppy-disk"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" @click="removeSite(site)" title="删除"><i class="fas fa-trash"></i></button>
+                                </td>
+                            </tr>
+                            <tr v-if="sites.length===0"><td colspan="6" class="text-center text-muted py-4">还没有采集站，先在上面添加一个吧</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <p class="text-muted small mt-3 mb-0">
+                提示：修改名称 / 地址 / 启用状态后，记得点该行的 <i class="fas fa-floppy-disk"></i> 保存。
+                API 地址只支持 <strong>Maccms V10 JSON 接口</strong>，不确定格式请先看「使用教程」。
+            </p>
+        </div>
+
+        <!-- 网盘搜索 -->
+        <div v-show="tab==='cloud'">
+            <div class="card p-4 mb-3">
+                <h6 class="mb-3"><i class="fas fa-cloud text-danger me-1"></i>PanSou 网盘搜索</h6>
+                <p class="text-muted small">
+                    接入 <a href="https://github.com/fish2018/pansou" target="_blank" rel="noopener">fish2018/pansou</a> 后，用户搜索影视时也会同时返回夸克、百度、阿里、UC 等网盘资源。
+                    本项目不内置网盘资源，需要你自己部署一个 PanSou 实例。
+                </p>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-7">
+                        <label class="form-label small text-muted">PanSou 服务地址</label>
+                        <input class="form-control mono" v-model.trim="settings.pansouUrl" placeholder="http://127.0.0.1:8888">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted">访问 Token（可选，开启认证时填写）</label>
+                        <input class="form-control mono" v-model.trim="settings.pansouToken" placeholder="留空表示未开启认证">
+                    </div>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="pansouEnabled" v-model="settings.pansouEnabled">
+                    <label class="form-check-label small" for="pansouEnabled">在前台搜索页显示「网盘资源」</label>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-danger btn-sm" @click="saveSettings"><i class="fas fa-floppy-disk me-1"></i>保存配置</button>
+                    <button class="btn btn-outline-secondary btn-sm" @click="testPansou"><i class="fas fa-vial me-1"></i>测试连接</button>
+                    <span v-if="pansouResult" class="small align-self-center" :class="pansouResult.success ? 'ok' : 'bad'">
+                        {{ pansouResult.success ? ('连接正常，延迟 ' + pansouResult.latency + 'ms，插件 ' + (pansouResult.plugins || 0) + ' 个') : (pansouResult.error || '连接失败') }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="card p-4">
+                <h6 class="mb-2"><i class="fas fa-terminal text-danger me-1"></i>一键部署 PanSou（推荐）</h6>
+                <p class="small text-muted mb-2">在任意一台能访问 Telegram 的服务器 / NAS 上执行：</p>
+                <pre class="code">docker run -d --name pansou -p 8888:8888 ghcr.io/fish2018/pansou:latest</pre>
+                <p class="small text-muted mb-0">
+                    部署完成后，在上面填 <code>http://服务器IP:8888</code>，点「测试连接」→「保存配置」。
+                    如果 PanSou 开启了认证，再用 <code>AUTH_USERS</code> 的账号登录拿到 Token 填入。
+                </p>
             </div>
         </div>
 
-        <div class="card shadow-sm">
-            <table class="table table-hover mb-0">
-                <thead class="table-dark">
-                    <tr>
-                        <th width="10%">启用</th>
-                        <th width="15%">标识(Key)</th>
-                        <th width="20%">名称</th>
-                        <th>API 地址 (Maccms V10)</th>
-                        <th width="15%">操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="(site, index) in sites" :key="index">
-                        <td>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" v-model="site.active">
-                            </div>
-                        </td>
-                        <td><input type="text" v-model="site.key" class="form-control form-control-sm"></td>
-                        <td><input type="text" v-model="site.name" class="form-control form-control-sm"></td>
-                        <td><input type="text" v-model="site.api" class="form-control form-control-sm"></td>
-                        <td>
-                            <button class="btn btn-danger btn-sm" @click="removeSite(index)">删除</button>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="mt-3 text-muted small">
-            提示：修改后请点击右上角“保存配置”生效。后端会自动代理这些接口，前端用户无法查看到具体 URL。
+        <!-- 教程 -->
+        <div v-show="tab==='guide'" class="card p-4">
+            <h5 class="mb-4"><i class="fas fa-graduation-cap text-danger me-1"></i>如何找到并添加采集站</h5>
+            <div style="counter-reset:step">
+                <div class="step">
+                    <h6>先搞清楚要填什么</h6>
+                    <p class="small text-muted mb-2">
+                        本项目的采集站必须是 <strong>Maccms V10 的 JSON 接口</strong>，不是网站首页，也不是播放页。
+                        常见形式如下（末尾有没有斜杠都行）：
+                    </p>
+                    <pre class="code">https://api.example.com/api.php/provide/vod
+https://example.com/inc/apijson.php</pre>
+                </div>
+
+                <div class="step">
+                    <h6>用谷歌搜索采集站</h6>
+                    <p class="small text-muted mb-2">在 Google 里搜索下面任意一个关键词组合，能找到很多公开的采集接口：</p>
+                    <ul class="small mb-2">
+                        <li><a href="https://www.google.com/search?q=%22api.php%2Fprovide%2Fvod%22" target="_blank" rel="noopener">"api.php/provide/vod"</a></li>
+                        <li><a href="https://www.google.com/search?q=inurl%3A%22api.php%2Fprovide%2Fvod%22" target="_blank" rel="noopener">inurl:"api.php/provide/vod"</a></li>
+                        <li><a href="https://www.google.com/search?q=%22maccms%22+%22%E9%87%87%E9%9B%86%E6%8E%A5%E5%8F%A3%22" target="_blank" rel="noopener">maccms 采集接口</a></li>
+                        <li><a href="https://www.google.com/search?q=%22inc%2Fapijson.php%22" target="_blank" rel="noopener">"inc/apijson.php"</a></li>
+                    </ul>
+                    <p class="small text-muted mb-0">也可以搜「影视采集站 分享」「Maccms 资源站 接口」等中文关键词。</p>
+                </div>
+
+                <div class="step">
+                    <h6>验证接口是不是真的能用</h6>
+                    <p class="small text-muted mb-2">把地址复制到浏览器，后面加上 <code>?ac=list&amp;pg=1</code>：</p>
+                    <pre class="code">https://api.example.com/api.php/provide/vod?ac=list&amp;pg=1</pre>
+                    <p class="small text-muted mb-2">如果看到类似下面的 JSON，说明格式正确：</p>
+                    <pre class="code">{
+  "code": 1,
+  "msg": "数据列表",
+  "list": [
+    { "vod_id": 123, "vod_name": "示例电影", "vod_pic": "https://..." }
+  ]
+}</pre>
+                    <div class="hint">看到一整页网页、XML、或者 404/500，都说明不是可用的 JSON 采集接口，换一个。</div>
+                </div>
+
+                <div class="step">
+                    <h6>填进后台并测试</h6>
+                    <p class="small text-muted mb-0">
+                        回到「采集站管理」，填站点名称和 API 地址，点 <strong>测试并添加</strong>。
+                        显示「连接正常」就代表添加成功，前台搜索会立刻用上。
+                    </p>
+                </div>
+
+                <div class="step">
+                    <h6>常见问题</h6>
+                    <table class="table table-sm small mt-1">
+                        <tbody>
+                            <tr><td class="text-muted" style="width:140px">测试超时</td><td>接口服务器慢或被墙，换个站；也可以调大环境变量 <code>TEST_TIMEOUT</code>。</td></tr>
+                            <tr><td class="text-muted">返回 HTML / XML</td><td>不是 JSON 接口，或者地址少了 <code>/api.php/provide/vod</code> 这一段。</td></tr>
+                            <tr><td class="text-muted">接口能用但搜不到片</td><td>该站资源少，属于正常情况；多添加几个站即可互补。</td></tr>
+                            <tr><td class="text-muted">搜索很慢</td><td>减少启用站点数，或把慢站关掉；搜索默认 6 秒超时。</td></tr>
+                            <tr><td class="text-muted">删除后又出现</td><td>旧版会自动合并内置站点，本版已修复；如仍出现请点「恢复内置站点」检查。</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="step">
+                    <h6>网盘搜索</h6>
+                    <p class="small text-muted mb-0">
+                        在「网盘搜索」页填 PanSou 地址即可。用户搜索时会多出一个「网盘资源」标签页，
+                        显示夸克 / 百度 / 阿里 / UC 等分享链接和提取码。
+                    </p>
+                </div>
+            </div>
+
+            <div class="hint mt-2">
+                <strong>免责声明：</strong>采集站与网盘资源均由第三方提供，本项目只做技术聚合，不存储、不发布任何影视内容。
+                请只接入你有权使用的接口，并遵守当地法律法规。
+            </div>
         </div>
     </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.4.27/vue.global.prod.min.js"></script>
 <script>
-    const { createApp } = Vue;
-    createApp({
-        data() {
-            return {
-                isLoggedIn: false,
-                password: '',
-                sites: []
+const { createApp } = Vue;
+
+createApp({
+    data() {
+        return {
+            loggedIn: false, password: '', loginError: '', loggingIn: false,
+            tab: 'sites', sites: [], settings: { pansouUrl: '', pansouToken: '', pansouEnabled: true },
+            status: {}, testingAll: false,
+            form: { name: '', api: '' }, formResult: null, adding: false,
+            importText: '', importing: false, importResult: null,
+            pansouResult: null
+        };
+    },
+    computed: {
+        activeCount() { return this.sites.filter(s => s.active).length; }
+    },
+    mounted() { this.checkLogin(); },
+    methods: {
+        async api(url, options) {
+            const res = await fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, options || {}));
+            let data = {};
+            try { data = await res.json(); } catch (e) { }
+            if (res.status === 401) { this.loggedIn = false; throw new Error('登录已过期，请重新登录'); }
+            return { res, data };
+        },
+        async checkLogin() {
+            try {
+                const { data } = await this.api('/api/admin/me');
+                if (data.loggedIn) { this.loggedIn = true; await this.loadSites(); }
+            } catch (e) { }
+        },
+        async login() {
+            this.loginError = ''; this.loggingIn = true;
+            try {
+                const { res, data } = await this.api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password: this.password }) });
+                if (data.success) { this.loggedIn = true; this.password = ''; await this.loadSites(); }
+                else this.loginError = data.error || (res.status === 429 ? '尝试次数过多' : '密码不正确');
+            } catch (e) { this.loginError = '无法连接服务器'; }
+            this.loggingIn = false;
+        },
+        async logout() {
+            try { await this.api('/api/admin/logout', { method: 'POST' }); } catch (e) { }
+            this.loggedIn = false; this.sites = [];
+        },
+        async loadSites() {
+            const { data } = await this.api('/api/admin/sites');
+            if (data.sites) {
+                this.sites = data.sites.map(s => Object.assign({}, s, { _originalKey: s.key }));
+                this.settings = Object.assign({ pansouUrl: '', pansouToken: '', pansouEnabled: true }, data.settings || {});
             }
         },
-        methods: {
-            async login() {
-                const res = await fetch('/api/admin/login', {
+        async addSite(withTest) {
+            if (!this.form.name || !this.form.api) return alert('请填写站点名称和 API 地址');
+            this.adding = true; this.formResult = null;
+            try {
+                const { data } = await this.api('/api/admin/sites', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ password: this.password })
+                    body: JSON.stringify({ name: this.form.name, api: this.form.api, test: withTest })
                 });
-                const data = await res.json();
                 if (data.success) {
-                    this.isLoggedIn = true;
-                    this.fetchSites();
+                    this.formResult = withTest ? Object.assign({ ok: true }, data.test) : null;
+                    if (withTest && data.test && !data.test.ok) this.formResult = data.test;
+                    if (!withTest || (data.test && data.test.ok)) { this.form = { name: '', api: '' }; }
+                    await this.loadSites();
+                    if (data.test) this.status[data.site.key] = data.test;
                 } else {
-                    alert(data.msg);
+                    this.formResult = { ok: false, message: data.error };
                 }
-            },
-            async fetchSites() {
-                const res = await fetch('/api/admin/sites');
-                this.sites = await res.json();
-            },
-            addSite() {
-                this.sites.push({ key: 'new', name: '新资源', api: '', active: true });
-            },
-            removeSite(index) {
-                if(confirm('确定删除吗？')) this.sites.splice(index, 1);
-            },
-            async saveSites() {
-                const res = await fetch('/api/admin/sites', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ sites: this.sites })
+            } catch (e) { this.formResult = { ok: false, message: e.message }; }
+            this.adding = false;
+        },
+        async testOne(site) {
+            const key = site.key;
+            this.status[key] = { loading: true };
+            try {
+                const { data } = await this.api('/api/admin/sites/test', { method: 'POST', body: JSON.stringify({ api: site.api }) });
+                this.status[key] = { ok: Boolean(data.success), latency: data.latency || 0, message: data.message };
+            } catch (e) { this.status[key] = { ok: false }; }
+        },
+        async testAll() {
+            this.testingAll = true;
+            for (const site of this.sites) await this.testOne(site);
+            this.testingAll = false;
+        },
+        async saveSite(site) {
+            if (!site.name || !site.api) return alert('名称和地址不能为空');
+            try {
+                const { data } = await this.api('/api/admin/sites/' + encodeURIComponent(site._originalKey || site.key), {
+                    method: 'PUT',
+                    body: JSON.stringify({ name: site.name, api: site.api, active: site.active, key: site.key })
                 });
-                alert('保存成功！');
-            }
+                if (data.success) {
+                    site._originalKey = data.site.key;
+                    await this.loadSites();
+                    alert('已保存');
+                } else alert(data.error || '保存失败');
+            } catch (e) { alert(e.message); }
+        },
+        async removeSite(site) {
+            if (!confirm('确定删除「' + site.name + '」吗？')) return;
+            try {
+                const { data } = await this.api('/api/admin/sites/' + encodeURIComponent(site._originalKey || site.key), { method: 'DELETE' });
+                if (data.success) await this.loadSites();
+                else alert(data.error || '删除失败');
+            } catch (e) { alert(e.message); }
+        },
+        async importSites() {
+            if (!this.importText.trim()) return alert('请先粘贴地址');
+            this.importing = true; this.importResult = null;
+            try {
+                const { data } = await this.api('/api/admin/sites/import', { method: 'POST', body: JSON.stringify({ text: this.importText }) });
+                if (data.success) { this.importResult = data; this.importText = ''; await this.loadSites(); }
+                else alert(data.error || '导入失败');
+            } catch (e) { alert(e.message); }
+            this.importing = false;
+        },
+        async restoreDefaults() {
+            if (!confirm('把内置的采集站重新加回来？（已存在的不会重复添加）')) return;
+            try {
+                const { data } = await this.api('/api/admin/sites/reset-defaults', { method: 'POST' });
+                if (data.success) { alert('已补充 ' + data.added + ' 个内置站点'); await this.loadSites(); }
+            } catch (e) { alert(e.message); }
+        },
+        exportSites() {
+            const blob = new Blob([JSON.stringify({ sites: this.sites }, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'donggua-sites.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        },
+        async saveSettings() {
+            try {
+                const { data } = await this.api('/api/admin/settings', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        pansouUrl: this.settings.pansouUrl,
+                        pansouToken: this.settings.pansouToken,
+                        pansouEnabled: this.settings.pansouEnabled
+                    })
+                });
+                if (data.success) { this.settings = data.settings; alert('配置已保存'); }
+                else alert(data.error || '保存失败');
+            } catch (e) { alert(e.message); }
+        },
+        async testPansou() {
+            this.pansouResult = null;
+            try {
+                const { data } = await this.api('/api/admin/pansou/test', { method: 'POST', body: JSON.stringify({ url: this.settings.pansouUrl }) });
+                this.pansouResult = data;
+            } catch (e) { this.pansouResult = { success: false, error: e.message }; }
         }
-    }).mount('#app');
+    }
+}).mount('#app');
 </script>
 </body>
 </html>

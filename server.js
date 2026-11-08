@@ -1,127 +1,593 @@
+// 本地开发可把配置放在 .env（Docker / 面板部署直接传环境变量即可）
+try { require('dotenv').config(); } catch (e) { }
+
 const express = require('express');
 const axios = require('axios');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const DATA_FILE = path.join(__dirname, 'db.json');
-const ADMIN_PASSWORD = "admin"; 
-const FORCE_UPDATE = true; 
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
+const TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT) || 5000;
+const PANSOU_TIMEOUT = Number(process.env.PANSOU_TIMEOUT) || 15000;
+const SEARCH_CACHE_TTL = 60 * 1000;
+const SESSION_TTL = 24 * 60 * 60 * 1000;
 
-app.use(cors());
-app.use(bodyParser.json());
-app.use(express.static('public'));
+app.disable('x-powered-by');
+app.use(cors({ origin: true, credentials: true }));
+app.use(bodyParser.json({ limit: '1mb' }));
+app.use(express.static(PUBLIC_DIR));
 
-// 默认接口配置 (保持你的 30+ 个接口不变)
+// ========== 默认采集站 ==========
+// 只在 db.json 不存在时写入；后台删除的站点不会被重新加回来。
+// 需要恢复时，后台有「恢复内置站点」按钮。
 const DEFAULT_SITES = [
-    { key: "ffzy", name: "非凡影视", api: "https://替换接口 一行一条", active: true },
+    { key: "ffzy", name: "非凡影视", api: "https://api.ffzyapi.com/api.php/provide/vod", active: true },
+    { key: "bfzy", name: "暴风资源", api: "https://bfzyapi.com/api.php/provide/vod", active: true },
+    { key: "dyttzy", name: "电影天堂", api: "http://caiji.dyttzyapi.com/api.php/provide/vod", active: true },
+    { key: "tyyszy", name: "天涯资源", api: "https://tyyszy.com/api.php/provide/vod", active: true },
+    { key: "zy360", name: "360资源", api: "https://360zy.com/api.php/provide/vod", active: true },
+    { key: "maotaizy", name: "茅台资源", api: "https://caiji.maotaizy.cc/api.php/provide/vod", active: true },
+    { key: "wolong", name: "卧龙资源", api: "https://wolongzyw.com/api.php/provide/vod", active: true },
+    { key: "jisu", name: "极速资源", api: "https://jszyapi.com/api.php/provide/vod", active: true },
+    { key: "dbzy", name: "豆瓣资源", api: "https://dbzy.tv/api.php/provide/vod", active: true },
+    { key: "mozhua", name: "魔爪资源", api: "https://mozhuazy.com/api.php/provide/vod", active: true },
+    { key: "mdzy", name: "魔都资源", api: "https://www.mdzyapi.com/api.php/provide/vod", active: true },
+    { key: "zuid", name: "最大资源", api: "https://api.zuidapi.com/api.php/provide/vod", active: true },
+    { key: "yinghua", name: "樱花资源", api: "https://m3u8.apiyhzy.com/api.php/provide/vod", active: true },
+    { key: "wujin", name: "无尽资源", api: "https://api.wujinapi.me/api.php/provide/vod", active: true },
+    { key: "wwzy", name: "旺旺短剧", api: "https://wwzy.tv/api.php/provide/vod", active: true },
+    { key: "ikun", name: "iKun资源", api: "https://ikunzyapi.com/api.php/provide/vod", active: true },
+    { key: "lzi", name: "量子资源", api: "https://cj.lziapi.com/api.php/provide/vod", active: true },
+    { key: "bdzy", name: "百度资源", api: "https://api.apibdzy.com/api.php/provide/vod", active: true },
+    { key: "hongniuzy", name: "红牛资源", api: "https://www.hongniuzy2.com/api.php/provide/vod", active: true },
+    { key: "xinlangaa", name: "新浪资源", api: "https://api.xinlangapi.com/xinlangapi.php/provide/vod", active: true },
+    { key: "ckzy", name: "CK资源", api: "https://ckzy.me/api.php/provide/vod", active: true },
+    { key: "ukuapi", name: "U酷资源", api: "https://api.ukuapi.com/api.php/provide/vod", active: true },
+    { key: "1080zyk", name: "1080资源", api: "https://api.1080zyku.com/inc/apijson.php/", active: true },
+    { key: "hhzyapi", name: "豪华资源", api: "https://hhzyapi.com/api.php/provide/vod", active: true },
+    { key: "subocaiji", name: "速博资源", api: "https://subocaiji.com/api.php/provide/vod", active: true },
+    { key: "p2100", name: "飘零资源", api: "https://p2100.net/api.php/provide/vod", active: true },
+    { key: "aqyzy", name: "爱奇艺", api: "https://iqiyizyapi.com/api.php/provide/vod", active: true },
+    { key: "yzzy", name: "优质资源", api: "https://api.yzzy-api.com/inc/apijson.php", active: true },
+    { key: "myzy", name: "猫眼资源", api: "https://api.maoyanapi.top/api.php/provide/vod", active: true },
+    { key: "rycj", name: "如意资源", api: "https://cj.rycjapi.com/api.php/provide/vod", active: true },
+    { key: "jinyingzy", name: "金鹰点播", api: "https://jinyingzy.com/api.php/provide/vod", active: true },
+    { key: "guangsuapi", name: "光速资源", api: "https://api.guangsuapi.com/api.php/provide/vod", active: true }
+];
 
-if (!fs.existsSync(DATA_FILE) || FORCE_UPDATE) {
-    // 只有在没有文件时，或者强制更新开启时，才重置配置
-    // 但为了不覆盖你可能手动添加的，我们这里只在文件不存在时写入，或者你确认要重置
-    if(!fs.existsSync(DATA_FILE)) {
-        fs.writeFileSync(DATA_FILE, JSON.stringify({ sites: DEFAULT_SITES }, null, 2));
-    }
+// ========== 数据库 ==========
+function defaultSettings() {
+    return { pansouUrl: '', pansouToken: '', pansouEnabled: true };
 }
-
-function getDB() { 
+function defaultDB() {
+    return { sites: DEFAULT_SITES.map(s => ({ ...s })), settings: defaultSettings(), version: 2 };
+}
+function atomicWrite(file, text) {
+    const tmp = file + '.tmp';
+    fs.writeFileSync(tmp, text, 'utf-8');
+    fs.renameSync(tmp, file);
+}
+function readDB() {
     try {
-        const data = JSON.parse(fs.readFileSync(DATA_FILE));
-        // 简单的合并逻辑：确保代码里的30多个接口都在数据库里
-        if(FORCE_UPDATE) {
-            const dbSites = data.sites || [];
-            DEFAULT_SITES.forEach(defSite => {
-                if(!dbSites.find(s => s.key === defSite.key)) {
-                    dbSites.push(defSite);
-                }
-            });
-            return { sites: dbSites };
-        }
+        const raw = fs.readFileSync(DATA_FILE, 'utf-8').replace(/^\uFEFF/, '');
+        const data = JSON.parse(raw);
+        if (!data || !Array.isArray(data.sites)) return defaultDB();
+        data.settings = Object.assign(defaultSettings(), data.settings || {});
         return data;
-    } catch(e) {
-        return { sites: DEFAULT_SITES };
+    } catch (e) {
+        return defaultDB();
     }
 }
-function saveDB(data) { fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2)); }
+function getDB() { return readDB(); }
+function saveDB(data) {
+    data.settings = Object.assign(defaultSettings(), data.settings || {});
+    atomicWrite(DATA_FILE, JSON.stringify(data, null, 2));
+}
+function writeDBIfMissing() {
+    if (!fs.existsSync(DATA_FILE)) saveDB(defaultDB());
+}
 
-// === ★ 新增：真实测速接口 ★ ===
-app.get('/api/check', async (req, res) => {
-    const { key } = req.query;
-    const sites = getDB().sites;
-    const site = sites.find(s => s.key === key);
-    
-    if (!site) return res.json({ latency: 9999 });
+// ========== 工具 ==========
+function cleanText(v, max) {
+    return String(v == null ? '' : v).trim().slice(0, max || 200);
+}
+function normalizeApi(raw) {
+    let u = cleanText(raw, 500);
+    if (!u) throw new Error('API 地址不能为空');
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    let parsed;
+    try { parsed = new URL(u); } catch (e) { throw new Error('API 地址格式不正确'); }
+    if (!parsed.hostname) throw new Error('API 地址缺少域名');
+    u = u.split('#')[0].split('?')[0].replace(/\/+$/, '');
+    if (!/\.php$/i.test(u) && !/provide\/vod/i.test(u)) u += '/api.php/provide/vod';
+    return u;
+}
+function siteHost(api) {
+    try { return new URL(api).hostname.replace(/^www\./, ''); } catch (e) { return 'site'; }
+}
+function makeKey(api, taken) {
+    const base = siteHost(api).split('.')[0].replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'site';
+    let key = base, i = 2;
+    while (taken.has(key)) { key = base + i; i++; }
+    taken.add(key);
+    return key;
+}
+function validKey(k) { return /^[a-zA-Z0-9_-]{1,40}$/.test(k); }
+async function mapLimit(items, limit, fn) {
+    const out = new Array(items.length);
+    let idx = 0;
+    async function worker() {
+        while (idx < items.length) {
+            const i = idx++;
+            out[i] = await fn(items[i], i);
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
+}
+function withQuery(url, query) {
+    return url + (url.includes('?') ? '&' : '?') + query;
+}
+function parseMaccmsList(data) {
+    if (!data || typeof data !== 'object') return null;
+    if (Array.isArray(data.list)) return data.list;
+    if (Array.isArray(data.data)) return data.data;
+    if (data.data && Array.isArray(data.data.list)) return data.data.list;
+    return null;
+}
 
-    const start = Date.now();
+// ========== 简易缓存 ==========
+const searchCache = new Map();
+const cloudCache = new Map();
+function cacheGet(map, key) {
+    const hit = map.get(key);
+    if (!hit) return null;
+    if (Date.now() > hit.exp) { map.delete(key); return null; }
+    return hit.value;
+}
+function cacheSet(map, key, value, ttl) {
+    if (map.size > 300) {
+        const first = map.keys().next().value;
+        map.delete(first);
+    }
+    map.set(key, { value, exp: Date.now() + (ttl || SEARCH_CACHE_TTL) });
+}
+
+// ========== 管理员会话 ==========
+const ADMIN_SECRET = crypto.randomBytes(32);
+const loginAttempts = new Map();
+
+function signSession(exp) {
+    const sig = crypto.createHmac('sha256', ADMIN_SECRET).update(String(exp)).digest('hex');
+    return exp + '.' + sig;
+}
+function verifySession(token) {
+    if (!token || typeof token !== 'string') return false;
+    const dot = token.indexOf('.');
+    if (dot < 1) return false;
+    const exp = token.slice(0, dot), sig = token.slice(dot + 1);
+    if (!/^\d+$/.test(exp) || Number(exp) < Date.now()) return false;
+    const expect = crypto.createHmac('sha256', ADMIN_SECRET).update(exp).digest('hex');
+    const a = Buffer.from(sig), b = Buffer.from(expect);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+function readCookie(req, name) {
+    const raw = req.headers.cookie || '';
+    for (const part of raw.split(';')) {
+        const i = part.indexOf('=');
+        if (i < 0) continue;
+        if (part.slice(0, i).trim() === name) return decodeURIComponent(part.slice(i + 1).trim());
+    }
+    return '';
+}
+function adminToken(req) {
+    return readCookie(req, 'dg_admin') || req.headers['x-admin-token'] || '';
+}
+function requireAdmin(req, res, next) {
+    if (!verifySession(adminToken(req))) return res.status(401).json({ success: false, error: '请先登录后台' });
+    next();
+}
+function tooManyAttempts(ip) {
+    const rec = loginAttempts.get(ip);
+    if (!rec) return false;
+    if (Date.now() > rec.reset) { loginAttempts.delete(ip); return false; }
+    return rec.count >= 8;
+}
+function recordFailure(ip) {
+    const now = Date.now();
+    const rec = loginAttempts.get(ip);
+    if (!rec || now > rec.reset) loginAttempts.set(ip, { count: 1, reset: now + 10 * 60 * 1000 });
+    else rec.count++;
+}
+
+// ========== 采集站检查 ==========
+async function testApi(api) {
+    const started = Date.now();
+    const url = withQuery(api, 'ac=list&pg=1');
     try {
-        // 尝试请求该接口的首页（只请求一页，极简模式）
-        await axios.get(`${site.api}?ac=list&pg=1`, { timeout: 3000 });
-        const latency = Date.now() - start;
-        res.json({ latency: latency });
+        const resp = await axios.get(url, {
+            timeout: TEST_TIMEOUT,
+            responseType: 'json',
+            headers: { 'User-Agent': 'Mozilla/5.0 DongguaTV/2.0', 'Accept': 'application/json,text/plain,*/*' },
+            validateStatus: () => true,
+            maxRedirects: 3
+        });
+        const latency = Date.now() - started;
+        const list = parseMaccmsList(resp.data);
+        if (!list) {
+            const preview = typeof resp.data === 'string' ? resp.data.slice(0, 80) : JSON.stringify(resp.data || {}).slice(0, 80);
+            return { ok: false, latency, status: resp.status, message: '不是 Maccms JSON 接口（返回内容：' + preview + '）' };
+        }
+        return {
+            ok: true,
+            latency,
+            status: resp.status,
+            count: list.length,
+            sample: list.slice(0, 3).map(x => x.vod_name).filter(Boolean)
+        };
     } catch (e) {
-        res.json({ latency: 9999 }); // 超时或错误
+        return { ok: false, latency: Date.now() - started, message: e.code === 'ECONNABORTED' ? '连接超时' : (e.message || '请求失败') };
+    }
+}
+
+// ========== 网盘搜索（PanSou） ==========
+function pansouBase() {
+    const s = getDB().settings || {};
+    const base = String(process.env.PANSOU_URL || s.pansouUrl || '').trim().replace(/\/+$/, '');
+    return base;
+}
+let pansouTokenCache = { token: '', exp: 0 };
+async function pansouToken(base) {
+    if (pansouTokenCache.token && Date.now() < pansouTokenCache.exp) return pansouTokenCache.token;
+    const s = getDB().settings || {};
+    const staticToken = process.env.PANSOU_TOKEN || s.pansouToken || '';
+    if (staticToken) return staticToken;
+    const user = process.env.PANSOU_USER, pass = process.env.PANSOU_PASS;
+    if (!user || !pass) return '';
+    const r = await axios.post(base + '/api/auth/login', { username: user, password: pass }, { timeout: 8000 });
+    if (r.data && r.data.token) {
+        const ttl = Number(r.data.expires_at) ? Number(r.data.expires_at) - Date.now() : 12 * 3600 * 1000;
+        pansouTokenCache = { token: r.data.token, exp: Date.now() + Math.max(60 * 1000, ttl - 60 * 1000) };
+        return r.data.token;
+    }
+    return '';
+}
+function normalizePansou(data, wd) {
+    const results = Array.isArray(data && data.results) ? data.results : [];
+    const seen = new Set();
+    const list = [];
+    const types = {};
+    for (const item of results) {
+        const links = Array.isArray(item.links) ? item.links : [];
+        for (const link of links) {
+            const url = String(link.url || '').trim();
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            const type = String(link.type || 'others').toLowerCase();
+            types[type] = (types[type] || 0) + 1;
+            list.push({
+                title: cleanText(item.title || link.work_title || wd, 160),
+                content: cleanText(item.content, 300),
+                channel: cleanText(item.channel, 60),
+                datetime: item.datetime || link.datetime || '',
+                type,
+                url,
+                password: cleanText(link.password, 32),
+                work_title: cleanText(link.work_title || item.title, 160),
+                tags: Array.isArray(item.tags) ? item.tags.slice(0, 6) : []
+            });
+        }
+    }
+    return { enabled: true, query: wd, total: list.length, types, list: list.slice(0, 200) };
+}
+
+// ========== 公共 API ==========
+app.get('/api/config', (req, res) => {
+    res.json({
+        cloudEnabled: Boolean(pansouBase()) && getDB().settings.pansouEnabled !== false,
+        siteCount: getDB().sites.filter(s => s.active).length
+    });
+});
+
+app.get('/api/sites', (req, res) => {
+    const sites = getDB().sites.map(s => ({ key: s.key, name: s.name, active: s.active !== false }));
+    res.json({ sites, cloudEnabled: Boolean(pansouBase()) && getDB().settings.pansouEnabled !== false });
+});
+
+app.get('/api/check', async (req, res) => {
+    const key = cleanText(req.query.key, 60);
+    const site = getDB().sites.find(s => s.key === key);
+    if (!site) return res.json({ latency: 9999, ok: false });
+    const started = Date.now();
+    try {
+        const resp = await axios.get(withQuery(site.api, 'ac=list&pg=1'), { timeout: 3000, validateStatus: () => true });
+        const latency = Date.now() - started;
+        const ok = Boolean(parseMaccmsList(resp.data));
+        res.json({ latency: ok ? latency : 9999, ok });
+    } catch (e) {
+        res.json({ latency: 9999, ok: false });
     }
 });
 
-// === 热门接口 ===
 app.get('/api/hot', async (req, res) => {
-    const sites = getDB().sites.filter(s => ['ffzy', 'bfzy', 'lzi', 'dbzy'].includes(s.key));
+    const sites = getDB().sites.filter(s => ['ffzy', 'bfzy', 'lzi', 'dbzy'].includes(s.key) && s.active !== false);
     for (const site of sites) {
         try {
-            const response = await axios.get(`${site.api}?ac=list&pg=1&h=24&out=json`, { timeout: 3000 });
-            const list = response.data.list || response.data.data;
-            if(list && list.length > 0) return res.json({ list: list.slice(0, 12) });
-        } catch (e) { continue; }
+            const response = await axios.get(withQuery(site.api, 'ac=list&pg=1&h=24&out=json'), { timeout: 4000 });
+            const list = parseMaccmsList(response.data);
+            if (list && list.length > 0) return res.json({ list: list.slice(0, 12) });
+        } catch (e) { /* 换下一个源 */ }
     }
     res.json({ list: [] });
 });
 
-// === 搜索接口 (为了速度，搜索阶段不测速) ===
 app.get('/api/search', async (req, res) => {
-    const { wd } = req.query;
-    console.log(`[Search] ${wd}`);
-    if (!wd) return res.json({ list: [] });
-    
-    const sites = getDB().sites.filter(s => s.active);
-    
-    const promises = sites.map(async (site) => {
+    const wd = cleanText(req.query.wd, 80);
+    if (!wd) return res.json({ list: [], errors: 0 });
+    const cacheKey = 's:' + wd.toLowerCase();
+    const cached = cacheGet(searchCache, cacheKey);
+    if (cached) return res.json(cached);
+
+    const sites = getDB().sites.filter(s => s.active !== false && s.api);
+    let errors = 0;
+    const chunks = await mapLimit(sites, 8, async (site) => {
         try {
-            const response = await axios.get(`${site.api}?ac=list&wd=${encodeURIComponent(wd)}&out=json`, { timeout: 6000 });
-            const data = response.data;
-            const list = data.list || data.data;
-            if (list && Array.isArray(list)) {
-                return list.map(item => ({
-                    ...item, 
-                    site_key: site.key, 
-                    site_name: site.name,
-                    // 这里先不测速，给个默认值，点击详情再测
-                    latency: 0 
-                }));
-            }
-        } catch (e) {}
-        return [];
+            const response = await axios.get(withQuery(site.api, 'ac=list&wd=' + encodeURIComponent(wd) + '&out=json'), {
+                timeout: SEARCH_TIMEOUT,
+                responseType: 'json',
+                validateStatus: () => true
+            });
+            const list = parseMaccmsList(response.data);
+            if (!Array.isArray(list)) { errors++; return []; }
+            return list.map(item => ({
+                ...item,
+                site_key: site.key,
+                site_name: site.name,
+                latency: 0
+            }));
+        } catch (e) {
+            errors++;
+            return [];
+        }
     });
-    
-    const results = await Promise.all(promises);
-    res.json({ list: results.flat() });
+    const payload = { list: chunks.flat(), errors, siteCount: sites.length };
+    cacheSet(searchCache, cacheKey, payload, SEARCH_CACHE_TTL);
+    res.json(payload);
 });
 
-// === 详情接口 ===
 app.get('/api/detail', async (req, res) => {
-    const { site_key, id } = req.query;
-    const targetSite = getDB().sites.find(s => s.key === site_key);
-    if (!targetSite) return res.status(404).json({ error: "Site not found" });
+    const siteKey = cleanText(req.query.site_key, 60);
+    const id = cleanText(req.query.id, 60);
+    const targetSite = getDB().sites.find(s => s.key === siteKey);
+    if (!targetSite) return res.status(404).json({ error: 'Site not found' });
     try {
-        const response = await axios.get(`${targetSite.api}?ac=detail&ids=${id}&out=json`, { timeout: 6000 });
+        const response = await axios.get(withQuery(targetSite.api, 'ac=detail&ids=' + encodeURIComponent(id) + '&out=json'), { timeout: 8000 });
         res.json(response.data);
-    } catch (e) { res.status(500).json({ error: "Source Error" }); }
+    } catch (e) {
+        res.status(502).json({ error: 'Source Error' });
+    }
 });
 
-app.post('/api/admin/login', (req, res) => req.body.password === ADMIN_PASSWORD ? res.json({ success: true }) : res.status(403).json({ success: false }));
-app.get('/api/admin/sites', (req, res) => res.json(getDB().sites));
-app.post('/api/admin/sites', (req, res) => { saveDB({sites: req.body.sites}); res.json({ success: true }); });
+app.get('/api/cloud/search', async (req, res) => {
+    const wd = cleanText(req.query.wd, 80);
+    if (!wd) return res.json({ enabled: true, list: [], total: 0 });
+    const base = pansouBase();
+    if (!base || getDB().settings.pansouEnabled === false) {
+        return res.json({ enabled: false, list: [], total: 0, message: '站长尚未开启网盘搜索' });
+    }
+    const cacheKey = 'c:' + wd.toLowerCase();
+    const cached = cacheGet(cloudCache, cacheKey);
+    if (cached) return res.json(cached);
+    try {
+        const token = await pansouToken(base);
+        const headers = token ? { Authorization: 'Bearer ' + token } : {};
+        const resp = await axios.post(base + '/api/search', { kw: wd }, { timeout: PANSOU_TIMEOUT, headers });
+        const payload = normalizePansou(resp.data, wd);
+        cacheSet(cloudCache, cacheKey, payload, 5 * 60 * 1000);
+        res.json(payload);
+    } catch (e) {
+        const status = e.response && e.response.status;
+        const message = status === 401
+            ? '网盘搜索需要认证，请在后台填写 PanSou Token'
+            : (e.code === 'ECONNABORTED' ? '网盘搜索超时' : '网盘搜索暂不可用');
+        res.json({ enabled: true, list: [], total: 0, error: message });
+    }
+});
 
-app.listen(PORT, () => { console.log(`服务已启动: http://localhost:${PORT}`); });
+// ========== 后台 API ==========
+app.post('/api/admin/login', (req, res) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    if (tooManyAttempts(ip)) return res.status(429).json({ success: false, error: '尝试次数过多，请 10 分钟后再试' });
+    const password = String((req.body && req.body.password) || '');
+    if (password !== ADMIN_PASSWORD) {
+        recordFailure(ip);
+        return res.status(403).json({ success: false, error: '密码不正确' });
+    }
+    loginAttempts.delete(ip);
+    const exp = Date.now() + SESSION_TTL;
+    const token = signSession(exp);
+    res.setHeader('Set-Cookie', 'dg_admin=' + encodeURIComponent(token) + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=' + Math.floor(SESSION_TTL / 1000));
+    res.json({ success: true, token, expiresAt: exp });
+});
+
+app.post('/api/admin/logout', (req, res) => {
+    res.setHeader('Set-Cookie', 'dg_admin=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+    res.json({ success: true });
+});
+
+app.get('/api/admin/me', (req, res) => {
+    res.json({ loggedIn: verifySession(adminToken(req)) });
+});
+
+app.get('/api/admin/sites', requireAdmin, (req, res) => {
+    const db = getDB();
+    res.json({ sites: db.sites, settings: db.settings, builtinCount: DEFAULT_SITES.length });
+});
+
+app.post('/api/admin/sites', requireAdmin, async (req, res) => {
+    const db = getDB();
+    const name = cleanText(req.body.name, 40);
+    let api;
+    try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+    if (!name) return res.status(400).json({ success: false, error: '请填写站点名称' });
+    if (db.sites.some(s => s.api === api)) return res.status(409).json({ success: false, error: '该 API 地址已存在' });
+    let key = cleanText(req.body.key, 40);
+    if (key) {
+        if (!validKey(key)) return res.status(400).json({ success: false, error: '标识只能包含字母、数字、下划线和中划线' });
+        if (db.sites.some(s => s.key === key)) return res.status(409).json({ success: false, error: '标识已被占用' });
+    } else {
+        key = makeKey(api, new Set(db.sites.map(s => s.key)));
+    }
+    const site = { key, name, api, active: req.body.active !== false };
+    let test = null;
+    if (req.body.test !== false) {
+        test = await testApi(api);
+        if (!test.ok) {
+            return res.status(400).json({ success: false, error: '连接失败：' + (test.message || '无法访问该接口'), test });
+        }
+    }
+    db.sites.push(site);
+    saveDB(db);
+    res.json({ success: true, site, test });
+});
+
+app.put('/api/admin/sites/:key', requireAdmin, async (req, res) => {
+    const db = getDB();
+    const key = cleanText(req.params.key, 40);
+    const site = db.sites.find(s => s.key === key);
+    if (!site) return res.status(404).json({ success: false, error: '站点不存在' });
+    if (req.body.name !== undefined) site.name = cleanText(req.body.name, 40);
+    if (req.body.active !== undefined) site.active = Boolean(req.body.active);
+    if (req.body.api !== undefined) {
+        let api;
+        try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+        if (db.sites.some(s => s.key !== key && s.api === api)) return res.status(409).json({ success: false, error: '该 API 地址已存在' });
+        site.api = api;
+    }
+    if (req.body.key !== undefined && req.body.key !== key) {
+        const newKey = cleanText(req.body.key, 40);
+        if (!validKey(newKey)) return res.status(400).json({ success: false, error: '标识格式不正确' });
+        if (db.sites.some(s => s.key === newKey)) return res.status(409).json({ success: false, error: '标识已被占用' });
+        site.key = newKey;
+    }
+    saveDB(db);
+    res.json({ success: true, site });
+});
+
+app.delete('/api/admin/sites/:key', requireAdmin, (req, res) => {
+    const db = getDB();
+    const key = cleanText(req.params.key, 40);
+    const before = db.sites.length;
+    db.sites = db.sites.filter(s => s.key !== key);
+    if (db.sites.length === before) return res.status(404).json({ success: false, error: '站点不存在' });
+    saveDB(db);
+    res.json({ success: true });
+});
+
+app.post('/api/admin/sites/test', requireAdmin, async (req, res) => {
+    let api;
+    try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+    const result = await testApi(api);
+    res.json({ success: result.ok, api, ...result });
+});
+
+app.post('/api/admin/sites/import', requireAdmin, async (req, res) => {
+    const text = String(req.body.text || '');
+    const db = getDB();
+    const taken = new Set(db.sites.map(s => s.key));
+    const existingApis = new Set(db.sites.map(s => s.api));
+    const added = [], skipped = [], failed = [];
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    for (const line of lines) {
+        const parts = line.split(/[|,\t]/).map(x => x.trim()).filter(Boolean);
+        let name = '', apiRaw = '';
+        if (parts.length >= 2 && /^https?:\/\//i.test(parts[1])) { name = parts[0]; apiRaw = parts[1]; }
+        else if (parts.length >= 2 && /^https?:\/\//i.test(parts[0])) { apiRaw = parts[0]; name = parts[1]; }
+        else { apiRaw = parts[0] || line; }
+        let api;
+        try { api = normalizeApi(apiRaw); } catch (e) { failed.push({ line, error: e.message }); continue; }
+        if (existingApis.has(api)) { skipped.push({ line, reason: '已存在' }); continue; }
+        if (!name) name = siteHost(api);
+        db.sites.push({ key: makeKey(api, taken), name: cleanText(name, 40), api, active: true });
+        existingApis.add(api);
+        added.push(api);
+    }
+    saveDB(db);
+    res.json({ success: true, added: added.length, skipped: skipped.length, failed: failed.length, details: { added, skipped, failed } });
+});
+
+app.post('/api/admin/sites/reset-defaults', requireAdmin, (req, res) => {
+    const db = getDB();
+    const existing = new Set(db.sites.map(s => s.api));
+    let added = 0;
+    for (const site of DEFAULT_SITES) {
+        if (existing.has(site.api)) continue;
+        const key = makeKey(site.api, new Set(db.sites.map(s => s.key)));
+        db.sites.push({ ...site, key });
+        added++;
+    }
+    saveDB(db);
+    res.json({ success: true, added });
+});
+
+app.put('/api/admin/settings', requireAdmin, (req, res) => {
+    const db = getDB();
+    const body = req.body || {};
+    if (body.pansouUrl !== undefined) {
+        let url = cleanText(body.pansouUrl, 300).replace(/\/+$/, '');
+        if (url && !/^https?:\/\//i.test(url)) url = 'http://' + url;
+        db.settings.pansouUrl = url;
+    }
+    if (body.pansouToken !== undefined) db.settings.pansouToken = cleanText(body.pansouToken, 500);
+    if (body.pansouEnabled !== undefined) db.settings.pansouEnabled = Boolean(body.pansouEnabled);
+    saveDB(db);
+    pansouTokenCache = { token: '', exp: 0 };
+    res.json({ success: true, settings: db.settings });
+});
+
+app.post('/api/admin/pansou/test', requireAdmin, async (req, res) => {
+    let base = cleanText(req.body.url, 300).replace(/\/+$/, '');
+    if (base && !/^https?:\/\//i.test(base)) base = 'http://' + base;
+    if (!base) return res.status(400).json({ success: false, error: '请先填写 PanSou 地址' });
+    try {
+        const started = Date.now();
+        const health = await axios.get(base + '/api/health', { timeout: 8000, validateStatus: () => true });
+        res.json({
+            success: health.status === 200,
+            latency: Date.now() - started,
+            authEnabled: Boolean(health.data && health.data.auth_enabled),
+            plugins: health.data && health.data.plugin_count
+        });
+    } catch (e) {
+        res.json({ success: false, error: e.code === 'ECONNABORTED' ? '连接超时' : '无法连接，请检查地址和端口' });
+    }
+});
+
+// 兼容旧前端：保留原来的整体保存接口（需登录）
+app.post('/api/admin/sites-legacy', requireAdmin, (req, res) => {
+    const sites = Array.isArray(req.body.sites) ? req.body.sites : [];
+    const db = getDB();
+    db.sites = sites.map(s => ({ key: s.key, name: s.name, api: s.api, active: s.active !== false }));
+    saveDB(db);
+    res.json({ success: true });
+});
+
+writeDBIfMissing();
+
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`服务已启动: http://localhost:${PORT}`);
+        console.log(`后台管理: http://localhost:${PORT}/admin.html`);
+        if (!process.env.ADMIN_PASSWORD) console.warn('[安全提示] 正在使用默认后台密码 admin，请设置环境变量 ADMIN_PASSWORD');
+    });
+}
+
+module.exports = app;
