@@ -1,70 +1,49 @@
-# 冬瓜TV (dongguaTV)
+# 冬瓜TV
 
-🎬 打造你的私人 Netflix！TMDb 智能刮削 + 全网聚合 + 极速播放
+基于 Node.js 的影视聚合站：TMDb 提供首页推荐和海报，Maccms 采集站提供搜索与播放，PanSou 提供网盘资源搜索。
 
-## 🌟 项目简介
+- 在线教程：https://minerchu.github.io/dongguaTV/
+- 后台入口：`http://服务器IP:3000/admin.html`
+- 技术栈：Node.js + Express，前端 Vue 3 + Bootstrap（CDN）
 
-📖 **部署与使用教程（GitHub Pages）**：https://minerchu.github.io/dongguaTV/
+## 功能
 
-冬瓜TV是一个基于 Node.js 的视频聚合平台：搜索时并发查询你在后台添加的多个 Maccms 采集站，提供多源聚合、实时测速、网盘搜索等功能，让你轻松构建个人影视库。
+- **多源聚合搜索**：并发查询多个 Maccms V10 JSON 接口，同一影片的多条线路自动合并。
+- **线路延迟显示**：详情页对每条线路调用测速接口，用颜色标示响应速度。
+- **TMDb 首页推荐**：本周趋势、华语、日韩、港台等影视列表。
+- **网盘资源搜索**：接入 [PanSou](https://github.com/fish2018/pansou) 后，搜索结果页增加「网盘资源」标签。
+- **可视化后台**：添加、测试、编辑、启停、删除、批量导入采集站，不用手改文件。
+- **后台使用教程**：内置接口格式、谷歌搜索关键词、验证方法和常见问题。
+- **PanSou 配置**：后台可填写地址和 Token，并测试连通性。
+- **不内置采集站**：仓库和正式版不包含任何第三方采集站地址。
+- **配置持久化**：站点和设置保存在 JSON 文件；Docker 使用 `data/` 目录或数据卷。
+- **后台鉴权**：HttpOnly Cookie 或 `X-Admin-Token`，登录失败有频率限制。
 
-## ✨ 核心功能
+## 快速开始
 
-- 🔍 **智能搜索** - 聚合你添加的多个影视采集站，一键搜索全网资源
-- ⚡ **实时测速** - 自动检测各站点响应速度，优先推荐最快资源
-- 🎯 **多源聚合** - 支持任意 Maccms V10 JSON 接口，后台随时增删
-- 🔥 **热门推荐** - 自动获取24小时热门影视内容
-- 🎨 **简洁界面** - 响应式设计，支持PC/移动端完美适配
-- 🔐 **后台管理** - 支持站点开关配置，自定义资源源
-- 📊 **数据持久化** - JSON数据库存储，支持自定义配置
-- 🛠️ **后台可视化配置** - 不用改文件，浏览器里就能添加/测试/删除采集站，内置图文教程
-- ☁️ **网盘资源搜索** - 接入 PanSou 后，搜索影视时同步返回夸克、百度、阿里、UC 等网盘资源
+### 方式一：Docker Compose（推荐）
 
-## 🚀 快速开始
-
-### 环境要求
-- Node.js ≥ 16.0
-- npm ≥ 6.0
-
-### 安装部署
-```bash
-# 克隆项目
-git clone https://github.com/your-username/dongguaTV.git
-cd dongguaTV
-
-# 安装依赖
-npm install
-
-# 复制配置模板，按需填写
-cp .env.example .env
-# 至少填 TMDB_API_KEY（前端还需要把 public/index.html 里的 TMDB_API_KEY 改成同一个 Key）
-
-# 启动服务
-npm start
-# 或
-node server.js
-```
-
-### Docker 方式
-
-**方式 A：Docker Compose（推荐）**
+要求：Docker 20.10+，Docker Compose v2。
 
 ```bash
 git clone https://github.com/Minerchu/dongguaTV.git
 cd dongguaTV
-# 可选：复制配置模板并改密码 / 填 TMDB Key
 cp .env.example .env
-# 同时启动主站 + PanSou 网盘搜索
+# 编辑 .env：至少修改 ADMIN_PASSWORD，并填写 TMDB_API_KEY
 docker compose up -d --build
 ```
 
-> 不需要网盘搜索：删掉 `docker-compose.yml` 里的 `pansou` 服务，并把 `PANSOU_URL` 留空即可。
-> 已经有自己的 PanSou：不用启动 `pansou` 服务，把 `PANSOU_URL` 改成你的地址。
-> 采集站配置保存在 `./data/db.json`，重建容器不会丢失。
+启动后访问：
 
-**方式 B：单容器 All-in-One**
+- 主站：`http://服务器IP:3000`
+- 后台：`http://服务器IP:3000/admin.html`
+- 配置：`./data/db.json`
 
-主站和 PanSou 打进一个镜像，适合宝塔 / 1Panel 这类面板：
+Compose 会同时启动主站和 PanSou。PanSou 只在 Compose 内部网络访问，不需要向公网开放 `8888` 端口。
+
+### 方式二：单容器 All-in-One
+
+适合宝塔、1Panel 等不方便使用 Compose 的面板。主站和 PanSou 运行在同一个容器里。
 
 ```bash
 docker build -f Dockerfile.allinone -t dongguatv:allinone .
@@ -77,191 +56,250 @@ docker run -d --name dongguatv \
   dongguatv:allinone
 ```
 
-> PanSou 已经打进镜像，只在容器内部监听 8888，**不需要对外暴露 8888 端口**。
 > 不挂载 `/app/data` 也能启动，但删除容器后采集站配置会一起丢失。
 
-**修改端口**
+### 方式三：Node.js 直接运行
+
+要求：Node.js 18+，推荐 20 / 22。
+
+```bash
+git clone https://github.com/Minerchu/dongguaTV.git
+cd dongguaTV
+npm install
+cp .env.example .env
+# 编辑 .env：填写 ADMIN_PASSWORD、TMDB_API_KEY，可选 PANSOU_URL
+npm start
+```
+
+非 Docker 部署时，还需要把 `public/index.html` 里的 `TMDB_API_KEY` 改成同一个 Key。
+
+## 第一次使用
+
+1. 打开 `http://服务器IP:3000/admin.html`。
+2. 输入管理员密码。默认是 `admin`，部署到公网前必须通过 `ADMIN_PASSWORD` 修改。
+3. 在「采集站管理」填写站点名称和 Maccms JSON 接口地址，点「测试并添加」。
+4. 打开「使用教程」可查看接口格式、谷歌搜索关键词和验证方法。
+5. 网盘搜索：Compose / All-in-One 已自动连接 PanSou；Node.js 部署需要在后台「网盘搜索」填写地址，或配置 `PANSOU_URL`。
+
+## 修改端口
+
+先记住：`ports` 左边是宿主机端口，右边是容器端口。
+
+### 只改访问端口
 
 ```yaml
 # docker-compose.yml
 ports:
-  - "8080:3000"   # 左边=宿主机端口，右边=容器端口
+  - "8080:3000"
 ```
-
-只想换访问端口就改左边；要连程序内部端口一起改，再加 `environment: - PORT=8080` 并把右边也改成 8080。
-完整说明见 [教程站点的「修改端口」章节](https://minerchu.github.io/dongguaTV/#ports)。
-### 访问应用
-- 前端页面: http://localhost:3000
-- 后台管理: http://localhost:3000/admin.html
-- 管理员密码: `admin`（生产环境请用 `ADMIN_PASSWORD` 环境变量修改）
-
-### 后台怎么用
-1. 打开 `/admin.html`，输入管理员密码登录
-2. 在「采集站管理」里填站点名称 + Maccms JSON 接口地址，点「测试并添加」
-3. 不知道去哪找接口？点「使用教程」，里面写了谷歌搜索关键词、接口格式和验证方法
-4. 想开网盘搜索？在「网盘搜索」页填 PanSou 地址并保存
-
-## 📡 API接口
-
-### 公共接口
-```
-GET  /api/config                     # 前台配置（是否开启网盘搜索、启用站点数）
-GET  /api/search?wd=关键词            # 聚合搜索（影视）
-GET  /api/cloud/search?wd=关键词      # 网盘搜索（需配置 PanSou）
-GET  /api/detail?site_key=站点key&id=影片ID
-GET  /api/hot                        # 热门推荐
-GET  /api/check?key=站点key           # 站点测速
-```
-
-### 管理接口（需登录，使用 Cookie 或 X-Admin-Token）
-```
-POST   /api/admin/login              # 登录，返回 token 并写入 HttpOnly Cookie
-POST   /api/admin/logout
-GET    /api/admin/sites              # 站点列表 + 网盘设置
-POST   /api/admin/sites              # 新增站点（test=true 时先测连通性）
-PUT    /api/admin/sites/:key         # 修改站点 / 启用状态 / 标识
-DELETE /api/admin/sites/:key         # 删除站点
-POST   /api/admin/sites/test         # 测试任意 Maccms 接口
-POST   /api/admin/sites/import       # 批量导入
-PUT    /api/admin/settings           # 保存 PanSou 地址 / Token / 开关
-POST   /api/admin/pansou/test        # 测试 PanSou 连通性
-```
-
-## 🎛️ 采集站怎么来
-
-**仓库里不包含任何采集站地址**，新安装启动后站点列表为空，需要你自己在后台添加：
-
-1. 打开「使用教程」，按里面的关键词用谷歌搜索公开的 Maccms V10 JSON 接口
-2. 在「采集站管理」填站点名称 + API 地址，点「测试并添加」
-3. 测试通过后，前台搜索立即生效
-
-添加后的地址只保存在服务器本地的 `db.json` 中（已加入 `.gitignore`），**不会提交到 GitHub**，
-也不会随仓库分发给其他人。旧版本代码里的 32 个站点仅保留在 git 历史中。
-
-## 🔧 配置说明
-
-### 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `PORT` | `3000` | 服务端口 |
-| `DB_PATH` | `./db.json` | 配置文件路径；Docker 镜像默认 `/app/data/db.json` |
-| `ADMIN_PASSWORD` | `admin` | 后台管理员密码，**生产环境务必修改** |
-| `TMDB_API_KEY` | 无 | TMDb API Key（Docker 启动时会注入到 index.html） |
-| `PANSOU_URL` | 无 | PanSou 服务地址，例如 `http://127.0.0.1:8888` |
-| `PANSOU_TOKEN` | 无 | PanSou 开启认证时的访问 Token |
-| `PANSOU_USER` / `PANSOU_PASS` | 无 | 也可用账号密码自动换取 Token |
-| `SEARCH_TIMEOUT` | `6000` | 单站搜索超时（毫秒） |
-| `TEST_TIMEOUT` | `5000` | 接口测试超时（毫秒） |
-| `PANSOU_TIMEOUT` | `15000` | 网盘搜索超时（毫秒） |
-
-后台里保存的 PanSou 地址/Token 会写入 `db.json`，**后台填写的地址优先**；`PANSOU_URL` 作为默认值，适合 Docker / 面板部署。
-使用 Docker 时 `db.json` 位于挂载出来的 `data/` 目录（容器内是 `/app/data/db.json`）。
-
-### 站点配置
-站点配置保存在 `db.json`，正常情况下**不需要手动改文件**，请在后台增删改。
-如需迁移或备份，可直接复制 `db.json`。
-
-```json
-{
-  "sites": [
-    {
-      "key": "ffzy",
-      "name": "我的资源站",
-      "api": "https://example.com/api.php/provide/vod",
-      "active": true
-    }
-  ],
-  "settings": {
-    "pansouUrl": "",
-    "pansouToken": "",
-    "pansouEnabled": true
-  }
-}
-```
-
-## ☁️ 网盘搜索（PanSou）
-
-本项目的 `docker-compose.yml` **已经内置 PanSou 服务**，执行 `docker compose up -d` 时主站和 PanSou 会一起启动，
-不需要你另外部署，也不需要手动填地址（默认 `http://pansou:8888`）。
-
-非 Docker 部署时，也可以单独启动一个 PanSou：
 
 ```bash
-docker run -d --name pansou -p 8888:8888 ghcr.io/fish2018/pansou:latest
+docker compose up -d
 ```
 
-然后在后台「网盘搜索」填 `http://服务器IP:8888` → 测试连接 → 保存配置。
+之后访问 `http://服务器IP:8080`，程序内部仍然是 `3000`。
 
-用户搜索时会多出「网盘资源」标签页，展示网盘类型、标题、提取码和分享链接。
-如果 PanSou 开启了认证（`AUTH_ENABLED=true`），请在后台填 Token，或配置 `PANSOU_USER` / `PANSOU_PASS`。
+### 同时修改容器内部端口
 
-> PanSou 需要能访问 Telegram 频道，服务器在墙内时要给它配 `PROXY` / `HTTPS_PROXY`（见 compose 注释）。
-> 网盘资源由第三方提供，本项目只做接口聚合，不存储任何内容。
+```yaml
+ports:
+  - "8080:8080"
+environment:
+  - PORT=8080
+```
 
-## 🛠️ 技术栈
+```bash
+docker compose up -d
+```
 
-- **后端**: Node.js + Express.js
-- **前端**: HTML5 + CSS3 + JavaScript
-- **数据存储**: JSON文件数据库
-- **HTTP请求**: Axios
-- **跨域处理**: CORS
-- **缓存**: Node-cache
+### All-in-One 修改端口
 
-## 📱 界面预览
+```bash
+docker run -d --name dongguatv \
+  -p 8080:8080 \
+  -e PORT=8080 \
+  -v dongguatv-data:/app/data \
+  -e ADMIN_PASSWORD=你的密码 \
+  dongguatv:allinone
+```
 
-### 主界面
-- 搜索框：支持关键词搜索
-- 热门推荐：展示24小时热门内容
-- 搜索结果：显示多源聚合结果
-- 详情页面：展示影片详细信息和播放链接
+### Node.js 修改端口
 
-### 管理后台
-- 采集站管理：添加 / 测速 / 启用 / 删除 / 批量导入 / 导出
-- 使用教程：怎么搜采集站、怎么判断 Maccms 接口、常见问题
-- 网盘搜索：PanSou 地址与 Token 配置、连通性测试
+修改 `.env`：
 
-## 🔒 安全说明
+```env
+PORT=8080
+```
 
-- 必须修改默认管理员密码（`ADMIN_PASSWORD`）
-- 管理接口已加登录校验，未登录无法读取或修改站点配置
-- 生产环境建议使用Nginx反向代理
-- 定期更新依赖包以确保安全性
+完整说明（含 PanSou 端口和 Nginx 反向代理）：[教程站 · 修改端口](https://minerchu.github.io/dongguaTV/#ports)
 
-## 📝 免责声明
+## 采集站
 
-本项目仅供学习研究使用，请勿用于商业用途。使用本项目产生的任何法律问题由使用者自行承担。请支持正版影视内容。
+仓库不包含任何采集站地址。新安装启动后站点列表为空，需要自行添加。
 
-## 🤝 贡献指南
+接口地址通常以这些形式结尾：
 
-欢迎提交Issue和Pull Request来完善项目！
+```text
+https://example.com/api.php/provide/vod
+https://example.com/inc/apijson.php
+```
 
-### 开发计划
-- [ ] 添加更多影视资源站点
-- [ ] 支持用户收藏和历史记录
-- [ ] 添加播放历史同步功能
-- [ ] 支持多用户系统
-- [ ] 添加影视推荐算法
+验证方法：在浏览器里给地址加上 `?ac=list&pg=1`，能返回包含 `list` 的 JSON 才可用。
 
-## 📚 教程站点（GitHub Pages）
+可以在 Google 搜索这些关键词：
 
-教程源码在仓库的 `docs/` 目录，启用方式：
+- `"api.php/provide/vod"`
+- `inurl:"api.php/provide/vod"`
+- `"inc/apijson.php"`
+- `maccms 采集接口`
 
-1. 打开仓库 **Settings → Pages**
-2. Source 选择 **Deploy from a branch**
-3. 分支选 `main`，目录选 `/docs`，保存
+添加后的地址只保存在服务器本地：
 
-稍等一分钟即可访问 `https://<你的用户名>.github.io/dongguaTV/`。
-教程内容不含任何真实采集站地址，只有 `example.com` 占位示例。
+- 非 Docker：`db.json`，或 `DB_PATH` 指定的文件
+- Docker Compose：`data/db.json`
+- All-in-One：`/app/data/db.json`，建议挂载数据卷
 
-## 📄 开源协议
+`db.json` 和 `data/` 已加入 `.gitignore`，不会提交到 GitHub。旧版本代码中的 32 个站点只存在于 git 历史，不会随新版本分发。
 
-MIT License - 详见 [LICENSE](LICENSE) 文件
+批量导入格式，每行一个：
 
-## ⭐ 支持项目
+```text
+我的资源站,https://example.com/api.php/provide/vod
+另一个站,https://example.org/inc/apijson.php
+```
 
-如果这个项目对你有帮助，请给个Star支持一下！
+## 配置
 
----
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `3000` | Web 服务端口 |
+| `DB_PATH` | `./db.json` | 配置文件路径；Docker 镜像默认 `/app/data/db.json` |
+| `ADMIN_PASSWORD` | `admin` | 后台密码，公网部署必须修改 |
+| `TMDB_API_KEY` | 空 | TMDb Key；Docker 启动时注入到前端 |
+| `PANSOU_URL` | 空 | PanSou 地址，例如 `http://pansou:8888` |
+| `PANSOU_TOKEN` | 空 | PanSou 开启认证时的 Token |
+| `PANSOU_USER` / `PANSOU_PASS` | 空 | 用账号密码自动换取 Token |
+| `SEARCH_TIMEOUT` | `6000` | 单站搜索超时（毫秒） |
+| `TEST_TIMEOUT` | `5000` | 添加站点时测试超时（毫秒） |
+| `PANSOU_TIMEOUT` | `15000` | 网盘搜索超时（毫秒） |
 
-**🎬 冬瓜TV - 让每个人都能拥有专属的影视库！**
+后台填写的 PanSou 地址和 Token 优先于环境变量；`PANSOU_URL` 适合 Docker / 面板统一配置。
+
+## 数据与备份
+
+配置文件包含采集站、PanSou 地址和开关。备份时只需要保存这个文件：
+
+```bash
+# 容器正在运行时
+docker cp dongguatv:/app/data/db.json ./db.json.bak
+```
+
+从旧版本迁移时，如果原配置在容器里的 `/app/db.json`，需要放到宿主机的 `data/db.json`，新版默认读取 `/app/data/db.json`：
+
+```bash
+mkdir -p data
+docker cp dongguatv:/app/db.json ./data/db.json
+```
+
+### 更新版本
+
+```bash
+git pull origin main
+docker compose up -d --build
+```
+
+`data/db.json` 不受影响，采集站配置会保留。
+
+## API
+
+### 公共接口
+
+```text
+GET /api/config                 前台配置（网盘开关、启用站点数）
+GET /api/sites                  站点列表（含启用状态）
+GET /api/check?key=站点key       测试单个站点
+GET /api/hot                    从已启用站点获取最近 24 小时更新
+GET /api/search?wd=关键词        聚合搜索
+GET /api/detail?site_key=&id=   影片详情
+GET /api/cloud/search?wd=关键词  网盘搜索
+```
+
+### 管理接口
+
+需要先登录，使用 `dg_admin` Cookie 或 `X-Admin-Token`：
+
+```text
+POST   /api/admin/login
+POST   /api/admin/logout
+GET    /api/admin/me
+GET    /api/admin/sites
+POST   /api/admin/sites
+PUT    /api/admin/sites/:key
+DELETE /api/admin/sites/:key
+POST   /api/admin/sites/test
+POST   /api/admin/sites/import
+PUT    /api/admin/settings
+POST   /api/admin/pansou/test
+```
+
+登录失败 10 分钟内最多 8 次，超过后返回 `429`。
+
+## 项目结构
+
+```text
+server.js              Express 服务、采集站代理、PanSou 转发、后台鉴权
+public/index.html      前台页面
+public/admin.html      后台页面
+public/style.css       前台样式
+docs/                  GitHub Pages 教程站
+Dockerfile             Compose 使用的主站镜像
+Dockerfile.allinone    主站 + PanSou 单容器镜像
+docker-compose.yml     Compose 部署
+entrypoint*.sh         容器启动脚本
+data/                  运行时数据（不提交）
+```
+
+## 常见问题
+
+### 搜索没有结果？
+
+先在后台确认采集站已添加并启用，再点「测试」确认接口返回 JSON。
+
+### 添加站点提示不是 Maccms JSON 接口？
+
+地址可能少了 `/api.php/provide/vod`，或者返回的是网页、XML。用 `?ac=list&pg=1` 在浏览器验证。
+
+### 搜索很慢？
+
+关闭响应慢的站点，或减少启用数量。默认单站 6 秒超时，可用 `SEARCH_TIMEOUT` 调整。
+
+### 忘记后台密码？
+
+修改 `ADMIN_PASSWORD` 后重启容器。
+
+### 网盘搜索显示不可用？
+
+检查 PanSou 是否运行、服务器能否访问 Telegram、代理是否正确。Compose 默认使用内部地址 `http://pansou:8888`。
+
+### 更新后采集站不见了？
+
+确认 `data/db.json` 已挂载；旧版本的 `/app/db.json` 需要迁移到 `data/db.json`。
+
+### 3000 端口被占用？
+
+参考[修改端口](#修改端口)，只改宿主机端口即可。
+
+## 安全建议
+
+- 公网部署前必须修改 `ADMIN_PASSWORD`。
+- 建议使用 Nginx / Caddy 配置 HTTPS。
+- 不要把 `db.json`、`.env` 或采集站地址提交到仓库。
+- 定期更新依赖并备份数据。
+
+## 免责声明
+
+本项目仅用于 Node.js 学习和接口聚合研究，不存储、不发布、不参与任何影视内容的制作与传播。采集站和网盘资源均由第三方提供，请只接入你有权使用的接口，并遵守当地法律法规。请支持正版。
+
+## License
+
+MIT License，详见 [LICENSE](LICENSE)。

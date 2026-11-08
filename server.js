@@ -121,6 +121,7 @@ function parseMaccmsList(data) {
 // ========== 简易缓存 ==========
 const searchCache = new Map();
 const cloudCache = new Map();
+const hotCache = new Map();
 function cacheGet(map, key) {
     const hit = map.get(key);
     if (!hit) return null;
@@ -292,12 +293,21 @@ app.get('/api/check', async (req, res) => {
 });
 
 app.get('/api/hot', async (req, res) => {
-    const sites = getDB().sites.filter(s => ['ffzy', 'bfzy', 'lzi', 'dbzy'].includes(s.key) && s.active !== false);
+    const cached = cacheGet(hotCache, 'hot');
+    if (cached) return res.json(cached);
+    const sites = getDB().sites.filter(s => s.active !== false && s.api).slice(0, 8);
     for (const site of sites) {
         try {
-            const response = await axios.get(withQuery(site.api, 'ac=list&pg=1&h=24&out=json'), { timeout: 4000 });
+            const response = await axios.get(withQuery(site.api, 'ac=list&pg=1&h=24&out=json'), {
+                timeout: 4000,
+                validateStatus: () => true
+            });
             const list = parseMaccmsList(response.data);
-            if (list && list.length > 0) return res.json({ list: list.slice(0, 12) });
+            if (list && list.length > 0) {
+                const payload = { list: list.slice(0, 12) };
+                cacheSet(hotCache, 'hot', payload, 5 * 60 * 1000);
+                return res.json(payload);
+            }
         } catch (e) { /* 换下一个源 */ }
     }
     res.json({ list: [] });
