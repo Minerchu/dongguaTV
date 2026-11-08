@@ -243,32 +243,43 @@ async function pansouToken(base) {
     return '';
 }
 function normalizePansou(data, wd) {
-    const results = Array.isArray(data && data.results) ? data.results : [];
+    const root = data && data.data && typeof data.data === 'object' ? data.data : data;
     const seen = new Set();
     const list = [];
     const types = {};
-    for (const item of results) {
-        const links = Array.isArray(item.links) ? item.links : [];
-        for (const link of links) {
-            const url = String(link.url || '').trim();
-            if (!url || seen.has(url)) continue;
-            seen.add(url);
-            const type = String(link.type || 'others').toLowerCase();
-            types[type] = (types[type] || 0) + 1;
-            list.push({
-                title: cleanText(item.title || link.work_title || wd, 160),
-                content: cleanText(item.content, 300),
-                channel: cleanText(item.channel, 60),
-                datetime: item.datetime || link.datetime || '',
-                type,
-                url,
-                password: cleanText(link.password, 32),
-                work_title: cleanText(link.work_title || item.title, 160),
-                tags: Array.isArray(item.tags) ? item.tags.slice(0, 6) : []
-            });
+    function add(item, link, fallbackType) {
+        const url = String(link.url || '').trim();
+        if (!url || seen.has(url)) return;
+        seen.add(url);
+        const type = String(link.type || fallbackType || 'others').toLowerCase();
+        const title = item.title || link.note || link.work_title || wd;
+        types[type] = (types[type] || 0) + 1;
+        list.push({
+            title: cleanText(title, 160),
+            content: cleanText(item.content, 300),
+            channel: cleanText(link.source || item.channel, 60),
+            datetime: item.datetime || link.datetime || '',
+            type,
+            url,
+            password: cleanText(link.password, 32),
+            work_title: cleanText(link.work_title || link.note || title, 160),
+            tags: Array.isArray(item.tags) ? item.tags.slice(0, 6) : []
+        });
+    }
+    if (root && root.merged_by_type && typeof root.merged_by_type === 'object') {
+        for (const [type, links] of Object.entries(root.merged_by_type)) {
+            if (!Array.isArray(links)) continue;
+            for (const link of links) add({}, link, type);
+        }
+    } else {
+        const results = Array.isArray(root && root.results) ? root.results : [];
+        for (const item of results) {
+            const links = Array.isArray(item.links) ? item.links : [];
+            for (const link of links) add(item, link, link.type);
         }
     }
-    return { enabled: true, query: wd, total: list.length, types, list: list.slice(0, 200) };
+    const total = Number(root && root.total) || list.length;
+    return { enabled: true, query: wd, total, types, list: list.slice(0, 200) };
 }
 
 // ========== TMDb 同源代理 ==========
