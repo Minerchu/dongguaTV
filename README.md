@@ -4,13 +4,13 @@
 
 ## 🌟 项目简介
 
-冬瓜TV是一个基于Node.js的视频聚合平台，集成了30+个影视资源站点的API，提供智能搜索、资源聚合、实时测速等功能，让你轻松构建个人影视库。
+冬瓜TV是一个基于 Node.js 的视频聚合平台：搜索时并发查询你在后台添加的多个 Maccms 采集站，提供多源聚合、实时测速、网盘搜索等功能，让你轻松构建个人影视库。
 
 ## ✨ 核心功能
 
-- 🔍 **智能搜索** - 聚合30+影视站点，一键搜索全网资源
+- 🔍 **智能搜索** - 聚合你添加的多个影视采集站，一键搜索全网资源
 - ⚡ **实时测速** - 自动检测各站点响应速度，优先推荐最快资源
-- 🎯 **多源聚合** - 支持非凡影视、暴风资源、电影天堂等30+主流站点
+- 🎯 **多源聚合** - 支持任意 Maccms V10 JSON 接口，后台随时增删
 - 🔥 **热门推荐** - 自动获取24小时热门影视内容
 - 🎨 **简洁界面** - 响应式设计，支持PC/移动端完美适配
 - 🔐 **后台管理** - 支持站点开关配置，自定义资源源
@@ -48,9 +48,12 @@ node server.js
 # 克隆项目
 git clone https://github.com/your-username/dongguaTV.git
 cd dongguaTV
-# 编译和启动
+# 编译并启动（会同时启动主站 + PanSou 网盘搜索）
 docker compose up -d --build
 ```
+
+> 不需要网盘搜索：删掉 `docker-compose.yml` 里的 `pansou` 服务，并把 `PANSOU_URL` 留空即可。
+> 已经有自己的 PanSou：不用启动 `pansou` 服务，把 `PANSOU_URL` 改成你的地址。
 ### 访问应用
 - 前端页面: http://localhost:3000
 - 后台管理: http://localhost:3000/admin.html
@@ -89,21 +92,16 @@ PUT    /api/admin/settings           # 保存 PanSou 地址 / Token / 开关
 POST   /api/admin/pansou/test        # 测试 PanSou 连通性
 ```
 
-## 🎛️ 内置站点
+## 🎛️ 采集站怎么来
 
-平台集成了以下30+个影视资源站点：
+**仓库里不包含任何采集站地址**，新安装启动后站点列表为空，需要你自己在后台添加：
 
-| 站点名称 | 状态 | 特点 |
-|---------|------|------|
-| 非凡影视 | ✅ | 资源丰富，更新快速 |
-| 暴风资源 | ✅ | 高清资源多 |
-| 电影天堂 | ✅ | 经典老牌站点 |
-| 天涯资源 | ✅ | 稳定可靠 |
-| 360资源 | ✅ | 接口稳定 |
-| 量子资源 | ✅ | 蓝光高清 |
-| 豆瓣资源 | ✅ | 评分准确 |
-| 爱奇艺 | ✅ | 正版资源 |
-| ... | ... | ... |
+1. 打开「使用教程」，按里面的关键词用谷歌搜索公开的 Maccms V10 JSON 接口
+2. 在「采集站管理」填站点名称 + API 地址，点「测试并添加」
+3. 测试通过后，前台搜索立即生效
+
+添加后的地址只保存在服务器本地的 `db.json` 中（已加入 `.gitignore`），**不会提交到 GitHub**，
+也不会随仓库分发给其他人。旧版本代码里的 32 个站点仅保留在 git 历史中。
 
 ## 🔧 配置说明
 
@@ -121,7 +119,7 @@ POST   /api/admin/pansou/test        # 测试 PanSou 连通性
 | `TEST_TIMEOUT` | `5000` | 接口测试超时（毫秒） |
 | `PANSOU_TIMEOUT` | `15000` | 网盘搜索超时（毫秒） |
 
-后台里保存的 PanSou 地址/Token 会写入 `db.json`，`PANSOU_URL` 环境变量优先级更高。
+后台里保存的 PanSou 地址/Token 会写入 `db.json`，**后台填写的地址优先**；`PANSOU_URL` 作为默认值，适合 Docker / 面板部署。
 
 ### 站点配置
 站点配置保存在 `db.json`，正常情况下**不需要手动改文件**，请在后台增删改。
@@ -132,8 +130,8 @@ POST   /api/admin/pansou/test        # 测试 PanSou 连通性
   "sites": [
     {
       "key": "ffzy",
-      "name": "非凡影视",
-      "api": "https://api.ffzyapi.com/api.php/provide/vod",
+      "name": "我的资源站",
+      "api": "https://example.com/api.php/provide/vod",
       "active": true
     }
   ],
@@ -147,19 +145,22 @@ POST   /api/admin/pansou/test        # 测试 PanSou 连通性
 
 ## ☁️ 网盘搜索（PanSou）
 
-本项目本身不提供网盘资源，只做接口聚合。先部署 [fish2018/pansou](https://github.com/fish2018/pansou)：
+本项目的 `docker-compose.yml` **已经内置 PanSou 服务**，执行 `docker compose up -d` 时主站和 PanSou 会一起启动，
+不需要你另外部署，也不需要手动填地址（默认 `http://pansou:8888`）。
+
+非 Docker 部署时，也可以单独启动一个 PanSou：
 
 ```bash
 docker run -d --name pansou -p 8888:8888 ghcr.io/fish2018/pansou:latest
 ```
 
-然后二选一：
-
-- 后台 →「网盘搜索」→ 填 `http://服务器IP:8888` → 测试连接 → 保存配置
-- 或设置环境变量 `PANSOU_URL=http://服务器IP:8888`
+然后在后台「网盘搜索」填 `http://服务器IP:8888` → 测试连接 → 保存配置。
 
 用户搜索时会多出「网盘资源」标签页，展示网盘类型、标题、提取码和分享链接。
 如果 PanSou 开启了认证（`AUTH_ENABLED=true`），请在后台填 Token，或配置 `PANSOU_USER` / `PANSOU_PASS`。
+
+> PanSou 需要能访问 Telegram 频道，服务器在墙内时要给它配 `PROXY` / `HTTPS_PROXY`（见 compose 注释）。
+> 网盘资源由第三方提供，本项目只做接口聚合，不存储任何内容。
 
 ## 🛠️ 技术栈
 

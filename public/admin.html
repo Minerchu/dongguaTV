@@ -70,7 +70,7 @@
             <div class="card p-3 mb-3">
                 <h6 class="mb-3"><i class="fas fa-plus text-danger me-1"></i>添加采集站</h6>
                 <div class="row g-2">
-                    <div class="col-md-3"><input class="form-control" v-model.trim="form.name" placeholder="站点名称，如：非凡影视"></div>
+                    <div class="col-md-3"><input class="form-control" v-model.trim="form.name" placeholder="站点名称，如：我的资源站"></div>
                     <div class="col-md-6"><input class="form-control mono" v-model.trim="form.api" placeholder="https://example.com/api.php/provide/vod"></div>
                     <div class="col-md-3 d-flex gap-2">
                         <button class="btn btn-danger flex-fill" :disabled="adding" @click="addSite(true)">
@@ -90,7 +90,7 @@
 
             <div class="card p-3 mb-3">
                 <h6 class="mb-2"><i class="fas fa-file-import text-danger me-1"></i>批量导入</h6>
-                <p class="text-muted small mb-2">每行一个，支持「名称,地址」或直接填地址。例如：<code>非凡影视,https://api.ffzyapi.com/api.php/provide/vod</code></p>
+                <p class="text-muted small mb-2">每行一个，支持「名称,地址」或直接填地址。例如：<code>示例站,https://example.com/api.php/provide/vod</code></p>
                 <textarea class="form-control mono mb-2" rows="3" v-model="importText" placeholder="https://xxx.com/api.php/provide/vod&#10;https://yyy.com/api.php/provide/vod"></textarea>
                 <div class="d-flex gap-2 align-items-center">
                     <button class="btn btn-outline-danger btn-sm" :disabled="importing" @click="importSites">{{ importing ? '导入中...' : '批量导入' }}</button>
@@ -102,12 +102,11 @@
 
             <div class="sticky-tools d-flex justify-content-between align-items-center">
                 <div class="small text-muted">
-                    共 {{ sites.length }} 个，启用 {{ activeCount }} 个
+                    共 {{ sites.length }} 个，启用 {{ activeCount }} 个（地址只保存在本站 db.json，不会进 Git 仓库）
                     <span v-if="testingAll" class="ms-2"><i class="fas fa-spinner fa-spin"></i> 正在测速...</span>
                 </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-outline-secondary btn-sm" :disabled="testingAll" @click="testAll"><i class="fas fa-gauge-high me-1"></i>全部测速</button>
-                    <button class="btn btn-outline-secondary btn-sm" @click="restoreDefaults"><i class="fas fa-rotate-left me-1"></i>恢复内置站点</button>
                     <button class="btn btn-outline-secondary btn-sm" @click="exportSites"><i class="fas fa-download me-1"></i>导出</button>
                 </div>
             </div>
@@ -150,7 +149,10 @@
                                     <button class="btn btn-outline-danger btn-sm" @click="removeSite(site)" title="删除"><i class="fas fa-trash"></i></button>
                                 </td>
                             </tr>
-                            <tr v-if="sites.length===0"><td colspan="6" class="text-center text-muted py-4">还没有采集站，先在上面添加一个吧</td></tr>
+                            <tr v-if="sites.length===0"><td colspan="6" class="text-center py-5">
+                                <div class="text-muted mb-2">还没有采集站，前台搜索暂时没有结果</div>
+                                <button class="btn btn-danger btn-sm" @click="tab='guide'">先看「使用教程」怎么找站</button>
+                            </td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -167,7 +169,7 @@
                 <h6 class="mb-3"><i class="fas fa-cloud text-danger me-1"></i>PanSou 网盘搜索</h6>
                 <p class="text-muted small">
                     接入 <a href="https://github.com/fish2018/pansou" target="_blank" rel="noopener">fish2018/pansou</a> 后，用户搜索影视时也会同时返回夸克、百度、阿里、UC 等网盘资源。
-                    本项目不内置网盘资源，需要你自己部署一个 PanSou 实例。
+                    本项目不内置网盘资源。使用 docker-compose 部署时已自动带上 PanSou 服务；也可以直接填你已有的 PanSou 地址。
                 </p>
                 <div class="row g-2 mb-3">
                     <div class="col-md-7">
@@ -260,7 +262,7 @@ https://example.com/inc/apijson.php</pre>
                             <tr><td class="text-muted">返回 HTML / XML</td><td>不是 JSON 接口，或者地址少了 <code>/api.php/provide/vod</code> 这一段。</td></tr>
                             <tr><td class="text-muted">接口能用但搜不到片</td><td>该站资源少，属于正常情况；多添加几个站即可互补。</td></tr>
                             <tr><td class="text-muted">搜索很慢</td><td>减少启用站点数，或把慢站关掉；搜索默认 6 秒超时。</td></tr>
-                            <tr><td class="text-muted">删除后又出现</td><td>旧版会自动合并内置站点，本版已修复；如仍出现请点「恢复内置站点」检查。</td></tr>
+                            <tr><td class="text-muted">添加后前台搜不到</td><td>确认该行是「启用」状态；刚添加的站点可能需要等它自己缓存更新，换个关键词再试。</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -399,13 +401,6 @@ createApp({
                 else alert(data.error || '导入失败');
             } catch (e) { alert(e.message); }
             this.importing = false;
-        },
-        async restoreDefaults() {
-            if (!confirm('把内置的采集站重新加回来？（已存在的不会重复添加）')) return;
-            try {
-                const { data } = await this.api('/api/admin/sites/reset-defaults', { method: 'POST' });
-                if (data.success) { alert('已补充 ' + data.added + ' 个内置站点'); await this.loadSites(); }
-            } catch (e) { alert(e.message); }
         },
         exportSites() {
             const blob = new Blob([JSON.stringify({ sites: this.sites }, null, 2)], { type: 'application/json' });

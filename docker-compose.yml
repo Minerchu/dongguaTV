@@ -1,14 +1,29 @@
-
 services:
   dongguatv:
     build: .
     container_name: dongguatv
     restart: unless-stopped
     ports:
-    - "3000:3000"
+      - "3000:3000"
     environment:
-    #- PORT=3000
-    - TMDB_API_KEY=key
-    - ADMIN_PASSWORD=admin
-    # 可选：网盘搜索
-    #- PANSOU_URL=http://pansou:8888
+      - PORT=3000
+      - TMDB_API_KEY=key
+      # 生产环境务必修改
+      - ADMIN_PASSWORD=admin
+      # 和下面的 pansou 服务在同一个 compose 网络里
+      - PANSOU_URL=http://pansou:8888
+    depends_on:
+      - pansou
+
+  # 网盘搜索（可选）。不需要的话把这一整段删掉，或把上面的 PANSOU_URL 留空。
+  pansou:
+    image: ghcr.io/fish2018/pansou:latest
+    container_name: pansou
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    # 服务器无法直连 Telegram 时，取消注释并填代理：
+    # environment:
+    #   - PROXY=socks5://host.docker.internal:7890
+    #   - HTTPS_PROXY=http://host.docker.internal:7890
+    #   - HTTP_PROXY=http://host.docker.internal:7890

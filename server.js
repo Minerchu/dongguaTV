@@ -25,50 +25,18 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json({ limit: '1mb' }));
 app.use(express.static(PUBLIC_DIR));
 
-// ========== 默认采集站 ==========
-// 只在 db.json 不存在时写入；后台删除的站点不会被重新加回来。
-// 需要恢复时，后台有「恢复内置站点」按钮。
-const DEFAULT_SITES = [
-    { key: "ffzy", name: "非凡影视", api: "https://api.ffzyapi.com/api.php/provide/vod", active: true },
-    { key: "bfzy", name: "暴风资源", api: "https://bfzyapi.com/api.php/provide/vod", active: true },
-    { key: "dyttzy", name: "电影天堂", api: "http://caiji.dyttzyapi.com/api.php/provide/vod", active: true },
-    { key: "tyyszy", name: "天涯资源", api: "https://tyyszy.com/api.php/provide/vod", active: true },
-    { key: "zy360", name: "360资源", api: "https://360zy.com/api.php/provide/vod", active: true },
-    { key: "maotaizy", name: "茅台资源", api: "https://caiji.maotaizy.cc/api.php/provide/vod", active: true },
-    { key: "wolong", name: "卧龙资源", api: "https://wolongzyw.com/api.php/provide/vod", active: true },
-    { key: "jisu", name: "极速资源", api: "https://jszyapi.com/api.php/provide/vod", active: true },
-    { key: "dbzy", name: "豆瓣资源", api: "https://dbzy.tv/api.php/provide/vod", active: true },
-    { key: "mozhua", name: "魔爪资源", api: "https://mozhuazy.com/api.php/provide/vod", active: true },
-    { key: "mdzy", name: "魔都资源", api: "https://www.mdzyapi.com/api.php/provide/vod", active: true },
-    { key: "zuid", name: "最大资源", api: "https://api.zuidapi.com/api.php/provide/vod", active: true },
-    { key: "yinghua", name: "樱花资源", api: "https://m3u8.apiyhzy.com/api.php/provide/vod", active: true },
-    { key: "wujin", name: "无尽资源", api: "https://api.wujinapi.me/api.php/provide/vod", active: true },
-    { key: "wwzy", name: "旺旺短剧", api: "https://wwzy.tv/api.php/provide/vod", active: true },
-    { key: "ikun", name: "iKun资源", api: "https://ikunzyapi.com/api.php/provide/vod", active: true },
-    { key: "lzi", name: "量子资源", api: "https://cj.lziapi.com/api.php/provide/vod", active: true },
-    { key: "bdzy", name: "百度资源", api: "https://api.apibdzy.com/api.php/provide/vod", active: true },
-    { key: "hongniuzy", name: "红牛资源", api: "https://www.hongniuzy2.com/api.php/provide/vod", active: true },
-    { key: "xinlangaa", name: "新浪资源", api: "https://api.xinlangapi.com/xinlangapi.php/provide/vod", active: true },
-    { key: "ckzy", name: "CK资源", api: "https://ckzy.me/api.php/provide/vod", active: true },
-    { key: "ukuapi", name: "U酷资源", api: "https://api.ukuapi.com/api.php/provide/vod", active: true },
-    { key: "1080zyk", name: "1080资源", api: "https://api.1080zyku.com/inc/apijson.php/", active: true },
-    { key: "hhzyapi", name: "豪华资源", api: "https://hhzyapi.com/api.php/provide/vod", active: true },
-    { key: "subocaiji", name: "速博资源", api: "https://subocaiji.com/api.php/provide/vod", active: true },
-    { key: "p2100", name: "飘零资源", api: "https://p2100.net/api.php/provide/vod", active: true },
-    { key: "aqyzy", name: "爱奇艺", api: "https://iqiyizyapi.com/api.php/provide/vod", active: true },
-    { key: "yzzy", name: "优质资源", api: "https://api.yzzy-api.com/inc/apijson.php", active: true },
-    { key: "myzy", name: "猫眼资源", api: "https://api.maoyanapi.top/api.php/provide/vod", active: true },
-    { key: "rycj", name: "如意资源", api: "https://cj.rycjapi.com/api.php/provide/vod", active: true },
-    { key: "jinyingzy", name: "金鹰点播", api: "https://jinyingzy.com/api.php/provide/vod", active: true },
-    { key: "guangsuapi", name: "光速资源", api: "https://api.guangsuapi.com/api.php/provide/vod", active: true }
-];
+// ========== 数据 ==========
+// 采集站地址不写进代码 / 仓库，首次启动为空，请在后台添加。
+// 这样仓库里不会出现任何第三方站点地址。
+
+
 
 // ========== 数据库 ==========
 function defaultSettings() {
     return { pansouUrl: '', pansouToken: '', pansouEnabled: true };
 }
 function defaultDB() {
-    return { sites: DEFAULT_SITES.map(s => ({ ...s })), settings: defaultSettings(), version: 2 };
+    return { sites: [], settings: defaultSettings(), version: 2 };
 }
 function atomicWrite(file, text) {
     const tmp = file + '.tmp';
@@ -114,7 +82,10 @@ function siteHost(api) {
     try { return new URL(api).hostname.replace(/^www\./, ''); } catch (e) { return 'site'; }
 }
 function makeKey(api, taken) {
-    const base = siteHost(api).split('.')[0].replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'site';
+    const labels = siteHost(api).split('.');
+    const generic = new Set(['api', 'www', 'cj', 'caiji', 'm3u8', 'vod', 'm', 'v']);
+    const picked = labels.find(l => l && l.length > 1 && !generic.has(l.toLowerCase())) || labels[0] || 'site';
+    const base = picked.replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'site';
     let key = base, i = 2;
     while (taken.has(key)) { key = base + i; i++; }
     taken.add(key);
@@ -241,14 +212,14 @@ async function testApi(api) {
 // ========== 网盘搜索（PanSou） ==========
 function pansouBase() {
     const s = getDB().settings || {};
-    const base = String(process.env.PANSOU_URL || s.pansouUrl || '').trim().replace(/\/+$/, '');
+    const base = String(s.pansouUrl || process.env.PANSOU_URL || '').trim().replace(/\/+$/, '');
     return base;
 }
 let pansouTokenCache = { token: '', exp: 0 };
 async function pansouToken(base) {
     if (pansouTokenCache.token && Date.now() < pansouTokenCache.exp) return pansouTokenCache.token;
     const s = getDB().settings || {};
-    const staticToken = process.env.PANSOU_TOKEN || s.pansouToken || '';
+    const staticToken = s.pansouToken || process.env.PANSOU_TOKEN || '';
     if (staticToken) return staticToken;
     const user = process.env.PANSOU_USER, pass = process.env.PANSOU_PASS;
     if (!user || !pass) return '';
@@ -429,7 +400,7 @@ app.get('/api/admin/me', (req, res) => {
 
 app.get('/api/admin/sites', requireAdmin, (req, res) => {
     const db = getDB();
-    res.json({ sites: db.sites, settings: db.settings, builtinCount: DEFAULT_SITES.length });
+    res.json({ sites: db.sites, settings: db.settings });
 });
 
 app.post('/api/admin/sites', requireAdmin, async (req, res) => {
@@ -522,20 +493,6 @@ app.post('/api/admin/sites/import', requireAdmin, async (req, res) => {
     }
     saveDB(db);
     res.json({ success: true, added: added.length, skipped: skipped.length, failed: failed.length, details: { added, skipped, failed } });
-});
-
-app.post('/api/admin/sites/reset-defaults', requireAdmin, (req, res) => {
-    const db = getDB();
-    const existing = new Set(db.sites.map(s => s.api));
-    let added = 0;
-    for (const site of DEFAULT_SITES) {
-        if (existing.has(site.api)) continue;
-        const key = makeKey(site.api, new Set(db.sites.map(s => s.key)));
-        db.sites.push({ ...site, key });
-        added++;
-    }
-    saveDB(db);
-    res.json({ success: true, added });
 });
 
 app.put('/api/admin/settings', requireAdmin, (req, res) => {
