@@ -82,7 +82,7 @@ TMDb Key 由服务端读取，前端不需要修改，也不会把 Key 写进网
 4. 打开「使用教程」可查看接口格式、谷歌搜索关键词和验证方法。
 5. 网盘搜索：Compose / All-in-One 已自动连接 PanSou；Node.js 部署需要在后台「网盘搜索」填写地址，或配置 `PANSOU_URL`。
 
-## TMDb 反代
+## TMDb 反代（默认零配置）
 
 Docker Compose 和 All-in-One 都已经内置同源反代，**不需要自己的域名、Cloudflare Worker 或其他额外服务**：
 
@@ -90,9 +90,17 @@ Docker Compose 和 All-in-One 都已经内置同源反代，**不需要自己的
 - 海报请求 `/tmdb/t/p/...`，`server.js` 转发到 `https://image.tmdb.org/t/p/...`
 - `TMDB_API_KEY` 只保存在服务端，不会出现在浏览器源码里
 
-只需要在 `.env` 或容器环境变量里填 `TMDB_API_KEY`。
+请求链路就是同一个端口，不需要额外 IP 或端口：
 
-如果服务器访问不了 TMDb（例如国内服务器），有两种办法：
+```text
+浏览器 → http://服务器IP:3000/tmdb/... → 容器内 server.js → TMDb
+```
+
+用户只需要在 `.env` 或容器环境变量里填 `TMDB_API_KEY`。默认**不要填** `HTTPS_PROXY`、`TMDB_API_BASE`、`TMDB_IMAGE_BASE`，也不需要额外启动反代容器。
+
+程序内置了自动备用域名：主域名超时或返回 5xx 时会自动切换，不需要用户处理。修改 Docker 对外端口（例如 `8080:3000`）也不会影响反代，因为前端始终请求当前访问地址下的 `/tmdb/...`。
+
+只有服务器本身访问不了 TMDb（例如国内服务器）时，才需要下面的可选设置：
 
 1. 在 `.env` 里填写代理：
 
@@ -104,43 +112,7 @@ HTTP_PROXY=http://host.docker.internal:7890
 `host.docker.internal` 指向宿主机，Compose 已经配置好映射。
 All-in-One 则直接把同样的变量写成 `-e HTTPS_PROXY=...`。
 
-2. 或者使用你自己的反代，把上游地址改掉：
-
-```env
-TMDB_API_BASE=https://你的反代域名/3
-TMDB_IMAGE_BASE=https://你的反代域名/t/p
-```
-
-反代只需要让服务器能访问，不需要处理 CORS（浏览器不会直接请求它）。
-
-### 自己搭一个反代
-
-Cloudflare Worker 示例：
-
-```js
-export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-    const isImage = url.pathname.startsWith('/t/p/');
-    const origin = isImage ? 'https://image.tmdb.org' : 'https://api.themoviedb.org';
-    return fetch(origin + url.pathname + url.search);
-  }
-};
-```
-
-Nginx 示例：
-
-```nginx
-location /tmdb-api/ { proxy_pass https://api.themoviedb.org/3/; }
-location /tmdb-img/ { proxy_pass https://image.tmdb.org/t/p/; }
-```
-
-对应配置：
-
-```env
-TMDB_API_BASE=https://你的域名/tmdb-api
-TMDB_IMAGE_BASE=https://你的域名/tmdb-img
-```
+只要宿主机能访问 TMDb，容器就能直接使用，不需要再搭建任何外部反代。
 
 ## 修改端口
 

@@ -270,7 +270,7 @@ PANSOU_URL=http://你的地址:8888</code></pre>
         </section>
 
         <section id="tmdb">
-            <h2>六、TMDb 反代</h2>
+            <h2>六、TMDb 反代（默认零配置）</h2>
             <p>前端不会再请求任何人的私人域名。服务端内置了 <code>/tmdb</code> 同源代理：</p>
             <ul>
                 <li>前端 <code>/tmdb/3/...</code> → <code>https://api.themoviedb.org/3/...</code></li>
@@ -281,34 +281,19 @@ PANSOU_URL=http://你的地址:8888</code></pre>
                 Docker Compose 和 All-in-One 已经集成好了，<strong>不需要买域名、搭 Cloudflare Worker 或额外反代服务</strong>。
                 只需要在 <code>.env</code> 里填 <code>TMDB_API_KEY</code>。
             </div>
+            <p>请求链路就在同一个端口，不需要额外的 IP、端口或反代容器：</p>
+<pre><code>浏览器 → http://服务器IP:3000/tmdb/... → 容器内 server.js → TMDb</code></pre>
+            <p>默认<strong>不要填</strong> <code>HTTPS_PROXY</code>、<code>TMDB_API_BASE</code>、<code>TMDB_IMAGE_BASE</code>。</p>
+            <p>主域名超时或返回 5xx 时会自动切换备用域名，用户无需处理。修改 Docker 对外端口（例如
+            <code>8080:3000</code>）也不会影响反代，因为前端始终请求当前访问地址下的 <code>/tmdb/...</code>。</p>
 
-            <h3>服务器访问不了 TMDb 怎么办？</h3>
+            <h3>只有服务器访问不了 TMDb 时</h3>
             <p>在 <code>.env</code> 里填写代理：</p>
 <pre><code>HTTPS_PROXY=http://host.docker.internal:7890
 HTTP_PROXY=http://host.docker.internal:7890</code></pre>
             <p><code>host.docker.internal</code> 指向宿主机，Compose 已经配置好映射。</p>
             <p>All-in-One 则直接把同样的变量写成 <code>-e HTTPS_PROXY=...</code>。</p>
-            <p>或者把上游地址换成你自己的反代：</p>
-<pre><code>TMDB_API_BASE=https://你的反代域名/3
-TMDB_IMAGE_BASE=https://你的反代域名/t/p</code></pre>
-            <p>反代只需要服务器能访问即可，不需要处理 CORS。</p>
-
-            <h3>自己搭一个反代</h3>
-            <p>Cloudflare Worker 示例：</p>
-<pre><code>export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-    const isImage = url.pathname.startsWith('/t/p/');
-    const origin = isImage ? 'https://image.tmdb.org' : 'https://api.themoviedb.org';
-    return fetch(origin + url.pathname + url.search);
-  }
-};</code></pre>
-            <p>Nginx 示例：</p>
-<pre><code>location /tmdb-api/ { proxy_pass https://api.themoviedb.org/3/; }
-location /tmdb-img/ { proxy_pass https://image.tmdb.org/t/p/; }</code></pre>
-            <p>然后填写：</p>
-<pre><code>TMDB_API_BASE=https://你的域名/tmdb-api
-TMDB_IMAGE_BASE=https://你的域名/tmdb-img</code></pre>
+            <p>只要宿主机能访问 TMDb，容器就能直接使用，不需要再搭建任何外部反代。</p>
         </section>
 
         <section id="api">
