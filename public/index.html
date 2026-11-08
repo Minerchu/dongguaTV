@@ -286,7 +286,7 @@
             </div>
 
             <div class="result-grid" v-if="!loading && activeTab === 'video'">
-                <div class="result-card" v-for="group in groupedList" :key="group.name" @click="openDetail(group)">
+                <div class="result-card" v-for="group in groupedList" :key="group.name" @click="openSearchResult(group)">
                     <div class="poster-wrap">
                         <img v-if="!isFallback(group.name)" :src="finalPoster(group)" :key="finalPoster(group)"
                             referrerpolicy="no-referrer" @error="handleImgError(group.name)" loading="lazy">
@@ -440,8 +440,12 @@
                             <span v-for="keyword in tmdbKeywords" :key="keyword.id">{{ keyword.name }}</span>
                         </div>
                         <p class="tmdb-overview">{{ tmdbInfo.overview || 'TMDb 暂无中文简介。' }}</p>
+                        <div class="tmdb-source-note" v-if="tmdbSearchGroup">
+                            <i class="fas fa-link"></i> 已匹配「{{ tmdbSearchGroup.name }}」的 {{ tmdbSearchGroup.sources.length }} 条播放线路
+                        </div>
                         <div class="tmdb-actions">
-                            <button class="tmdb-action primary" @click="searchFromTmdb"><i class="fas fa-search"></i> 找片源</button>
+                            <button v-if="tmdbSearchGroup" class="tmdb-action primary" @click="playTmdbGroup"><i class="fas fa-play"></i> 播放片源</button>
+                            <button class="tmdb-action" :class="{ primary: !tmdbSearchGroup }" @click="searchFromTmdb"><i class="fas fa-search"></i> 找片源</button>
                             <a v-if="tmdbTrailer" :href="'https://www.youtube.com/watch?v=' + tmdbTrailer.key" target="_blank" rel="noopener noreferrer" class="tmdb-action"><i class="fab fa-youtube"></i> 看预告</a>
                             <a v-if="tmdbInfo.homepage" :href="tmdbInfo.homepage" target="_blank" rel="noopener noreferrer" class="tmdb-action"><i class="fas fa-globe"></i> 官网</a>
                             <a v-if="tmdbInfo.external_ids && tmdbInfo.external_ids.imdb_id" :href="'https://www.imdb.com/title/' + tmdbInfo.external_ids.imdb_id" target="_blank" rel="noopener noreferrer" class="tmdb-action">IMDb</a>
@@ -535,6 +539,12 @@
         function detectTmdbRegion() {
             const region = String(navigator.language || 'zh-CN').split('-')[1] || 'CN';
             return TMDB_REGION_OPTIONS.some(opt => opt.code === region.toUpperCase()) ? region.toUpperCase() : 'CN';
+        }
+
+        function setAppRoute(url, replace = false) {
+            const target = url || '/';
+            if (window.location.pathname + window.location.search === target) return;
+            window.history[replace ? 'replaceState' : 'pushState']({ app: true }, '', target);
         }
 
         let dp = null;
@@ -692,11 +702,13 @@
                     tmdbCast: [], tmdbCrew: [], tmdbTrailer: null, tmdbRecommendations: [],
                     tmdbProviderMap: {}, tmdbProviders: null, tmdbRegion: detectTmdbRegion(),
                     tmdbRegionOptions: TMDB_REGION_OPTIONS, tmdbRequestSeq: 0,
-                    tmdbAgeRating: '', tmdbKeywords: [], tmdbCollectionParts: []
+                    tmdbAgeRating: '', tmdbKeywords: [], tmdbCollectionParts: [],
+                    tmdbSearchGroup: null, tmdbReturnRoute: '/', tmdbSearchSeq: 0
                 }
             },
             mounted() {
                 window.addEventListener('scroll', () => { this.scrollY = window.scrollY; });
+                window.addEventListener('popstate', () => this.applyRoute());
                 window.addEventListener('keydown', (e) => {
                     if (e.key !== 'Escape') return;
                     if (this.tmdbOpen) this.closeTmdb();
@@ -705,6 +717,7 @@
                 this.fetchHero();
                 this.fetchAllLists();
                 this.fetchConfig();
+                this.applyRoute();
                 
                 // 初始化热榜滑动功能
                 this.$nextTick(() => {
@@ -788,11 +801,78 @@
                     const list = keywords.keywords || keywords.results || [];
                     return Array.isArray(list) ? list.slice(0, 10) : [];
                 },
-                async openTmdb(item, type = 'movie') {
+                tmdbSearchName(name) {
+                    const cleaned = String(name || '')
+                        .replace(/[\[\(（【][^\]\)）】]*[\]\)）】]/g, ' ')
+                        .replace(/第[0-9一二三四五六七八九十]+[季部]/g, ' ')
+                        .replace(/(?:19|20)\d{2}.*$/g, ' ')
+                        .replace(/(?:HD|BD|4K|1080P|720P|TC|TS|国语|粤语|中字|高清).*$/gi, ' ')
+                        .replace(/[._]+/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    return cleaned || String(name || '').trim();
+                },
+                normalizeTmdbTitle(name) {
+                    return String(name || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+                },
+                async findTmdbForSearch(name) {
+                    const query = this.tmdbSearchName(name);
+                    if (!query) return null;
+                    try {
+                        const res = await fetch(`${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(query)}&language=zh-CN`);
+                        if (!res.ok) return null;
+                        const data = await res.json();
+                        const base = this.normalizeTmdbTitle(query);
+                        const year = (String(name || '').match(/(?:19|20)\d{2}/) || [])[0] || '';
+                        const candidates = (data.results || []).filter(item =>
+                            item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv')
+                        ).map(item => {
+                            const title = this.normalizeTmdbTitle(this.tmdbTitleText(item));
+                            const date = String(item.release_date || item.first_air_date || '');
+                            let score = 0;
+                            if (title && (title === base || title.includes(base) || base.includes(title))) score += 100;
+                            if (year && date.startsWith(year)) score += 40;
+                            score += Math.min(20, Math.log10(Number(item.popularity || 1) + 1) * 5);
+                            return { item, score };
+                        }).sort((a, b) => b.score - a.score);
+                        return candidates.length ? candidates[0].item : null;
+                    } catch (error) {
+                        return null;
+                    }
+                },
+                async openSearchResult(group) {
+                    if (!group || !Array.isArray(group.sources) || !group.sources.length) return;
+                    const seq = ++this.tmdbSearchSeq;
+                    this.tmdbSearchGroup = group;
+                    this.tmdbReturnRoute = this.searched && this.keyword
+                        ? '/search?wd=' + encodeURIComponent(this.keyword)
+                        : '/';
+                    this.tmdbOpen = true;
+                    this.tmdbLoading = true;
+                    this.tmdbError = '';
+                    document.body.classList.add('tmdb-open');
+                    const found = await this.findTmdbForSearch(group.name);
+                    if (!this.tmdbOpen || seq !== this.tmdbSearchSeq) return;
+                    if (!found) {
+                        this.closeTmdb(false);
+                        this.openDetail(group);
+                        return;
+                    }
+                    const type = found.media_type === 'tv' || found.first_air_date ? 'tv' : 'movie';
+                    const ok = await this.openTmdb(found, type, group);
+                    if (!ok && seq === this.tmdbSearchSeq) {
+                        this.closeTmdb(false);
+                        this.openDetail(group);
+                    }
+                },
+                async openTmdb(item, type = 'movie', sourceGroup = null, updateRoute = true) {
                     const id = Number(item && item.id);
-                    if (!id) return;
+                    if (!id) return false;
                     const nextType = type === 'tv' ? 'tv' : 'movie';
                     const seq = ++this.tmdbRequestSeq;
+                    this.tmdbSearchGroup = sourceGroup || null;
+                    if (!sourceGroup) this.tmdbReturnRoute = '/';
+                    if (updateRoute !== false) setAppRoute(`/title/${nextType}/${id}`);
                     this.tmdbOpen = true;
                     this.tmdbLoading = true;
                     this.tmdbError = '';
@@ -816,7 +896,7 @@
                         const res = await fetch(`${TMDB_BASE_URL}/${nextType}/${id}?language=zh-CN&append_to_response=${append}&include_video_language=zh-CN%2Cen%2Cnull`);
                         if (!res.ok) throw new Error('TMDb request failed: ' + res.status);
                         const data = await res.json();
-                        if (seq !== this.tmdbRequestSeq) return;
+                        if (seq !== this.tmdbRequestSeq) return false;
 
                         this.tmdbInfo = data;
                         this.tmdbCast = ((data.credits && data.credits.cast) || []).slice(0, 12);
@@ -841,9 +921,11 @@
                         if (data.belongs_to_collection && data.belongs_to_collection.id) {
                             this.loadTmdbCollection(data.belongs_to_collection, seq);
                         }
+                        return true;
                     } catch (error) {
-                        if (seq !== this.tmdbRequestSeq) return;
+                        if (seq !== this.tmdbRequestSeq) return false;
                         this.tmdbError = 'TMDb 资料加载失败，请稍后重试。';
+                        return false;
                     } finally {
                         if (seq === this.tmdbRequestSeq) this.tmdbLoading = false;
                     }
@@ -862,11 +944,13 @@
                         if (seq === this.tmdbRequestSeq) this.tmdbCollectionParts = [];
                     }
                 },
-                closeTmdb() {
+                closeTmdb(updateRoute = true) {
                     this.tmdbRequestSeq += 1;
+                    this.tmdbSearchSeq += 1;
                     this.tmdbOpen = false;
                     this.tmdbLoading = false;
                     document.body.classList.remove('tmdb-open');
+                    if (updateRoute !== false) setAppRoute(this.tmdbReturnRoute || '/');
                 },
                 changeTmdbRegion() {
                     this.syncTmdbProviders();
@@ -878,8 +962,14 @@
                 searchFromTmdb() {
                     const title = this.tmdbTitleText(this.tmdbInfo);
                     if (!title) return;
-                    this.closeTmdb();
+                    this.closeTmdb(false);
                     this.$nextTick(() => this.autoSearch(title));
+                },
+                playTmdbGroup() {
+                    const group = this.tmdbSearchGroup;
+                    if (!group) return;
+                    this.closeTmdb(false);
+                    this.$nextTick(() => this.openDetail(group));
                 },
                 castVideo() {
                     const videoEl = document.querySelector('.dplayer-video');
@@ -953,6 +1043,59 @@
                         }).catch(() => { });
                 },
 
+                searchRoute() {
+                    return this.keyword ? '/search?wd=' + encodeURIComponent(this.keyword) : '/';
+                },
+                watchRoute(group, source) {
+                    const params = new URLSearchParams({
+                        name: (group && group.name) || (source && source.vod_name) || '影片',
+                        site: (source && source.site_key) || '',
+                        id: String((source && source.vod_id) || '')
+                    });
+                    return '/watch?' + params.toString();
+                },
+                applyRoute() {
+                    const path = String(window.location.pathname || '/').replace(/\/+$/, '') || '/';
+                    const params = new URLSearchParams(window.location.search);
+                    if (path === '/search') {
+                        if (this.tmdbOpen) this.closeTmdb(false);
+                        if (this.showDetail) this.closeDetail(false);
+                        const keyword = (params.get('wd') || '').trim();
+                        if (keyword) {
+                            this.keyword = keyword;
+                            this.doSearch(false);
+                        } else {
+                            this.clearSearch(false);
+                        }
+                        return;
+                    }
+                    const titleMatch = path.match(/^\/title\/(movie|tv)\/(\d+)$/);
+                    if (titleMatch) {
+                        if (this.showDetail) this.closeDetail(false);
+                        this.openTmdb({ id: Number(titleMatch[2]) }, titleMatch[1], null, false);
+                        return;
+                    }
+                    if (path === '/watch') {
+                        const site = params.get('site');
+                        const id = params.get('id');
+                        const name = params.get('name') || '影片';
+                        if (site && id) {
+                            if (this.tmdbOpen) this.closeTmdb(false);
+                            this.openDetail({
+                                name,
+                                pic: '',
+                                sources: [{ site_key: site, vod_id: id, vod_name: name, latency: 999 }]
+                            }, false);
+                        } else {
+                            setAppRoute('/');
+                            this.clearSearch(false);
+                        }
+                        return;
+                    }
+                    if (this.tmdbOpen) this.closeTmdb(false);
+                    if (this.showDetail) this.closeDetail(false);
+                    this.clearSearch(false);
+                },
                 autoSearch(name) {
                     this.keyword = name;
                     this.doSearch();
@@ -960,7 +1103,15 @@
                         document.getElementById('search-result-anchor').scrollIntoView({ behavior: 'smooth' });
                     }, 100);
                 },
-                clearSearch() { this.searched = false; this.keyword = ''; this.rawList = []; this.activeTab = 'video'; this.cloudResults = []; this.cloudError = ''; },
+                clearSearch(updateRoute = true) {
+                    this.searched = false;
+                    this.keyword = '';
+                    this.rawList = [];
+                    this.activeTab = 'video';
+                    this.cloudResults = [];
+                    this.cloudError = '';
+                    if (updateRoute !== false) setAppRoute('/');
+                },
                 async fetchConfig() {
                     try {
                         const res = await fetch('/api/config');
@@ -968,9 +1119,10 @@
                         this.cloudEnabled = Boolean(data.cloudEnabled);
                     } catch (e) { this.cloudEnabled = false; }
                 },
-                async doSearch() {
+                async doSearch(updateRoute = true) {
                     if (!this.keyword) return;
                     const kw = this.keyword;
+                    if (updateRoute !== false) setAppRoute('/search?wd=' + encodeURIComponent(kw));
                     this.loading = true;
                     this.searched = true;
                     this.rawList = [];
@@ -1035,7 +1187,8 @@
                         prompt('请手动复制', text);
                     }
                 },
-                openDetail(group) {
+                openDetail(group, updateRoute = true) {
+                    if (!group || !Array.isArray(group.sources) || !group.sources.length) return;
                     this.currentGroup = group;
                     this.showDetail = true;
                     this.currentGroup.sources.forEach(source => {
@@ -1046,10 +1199,18 @@
                     });
                     let best = group.sources[0];
                     this.switchSource(best);
+                    if (updateRoute !== false) setAppRoute(this.watchRoute(group, best));
                 },
-                closeDetail() { this.showDetail = false; if (dp) dp.pause(); },
+                closeDetail(updateRoute = true) {
+                    this.showDetail = false;
+                    if (dp) dp.pause();
+                    if (updateRoute !== false) setAppRoute(this.searchRoute());
+                },
                 async switchSource(source) {
                     this.currentSource = source; this.loadingDetail = true; this.episodeList = [];
+                    if (this.showDetail && this.currentGroup) {
+                        setAppRoute(this.watchRoute(this.currentGroup, source), true);
+                    }
                     try {
                         const res = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`);
                         const data = await res.json();

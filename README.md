@@ -6,13 +6,27 @@
 - 后台入口：`http://服务器IP:3000/admin.html`
 - 技术栈：Node.js + Express，前端 Vue 3 + Bootstrap（CDN）
 
+## 界面预览
+
+| 首页推荐 | TMDb 影视详情 |
+| --- | --- |
+| ![冬瓜TV 首页](docs/assets/screenshots/home-tmdb.jpg) | ![TMDb 影视详情](docs/assets/screenshots/tmdb-detail.jpg) |
+
+| 播放平台与推荐 | 可视化后台 |
+| --- | --- |
+| ![播放平台与推荐](docs/assets/screenshots/tmdb-providers.jpg) | ![采集站管理](docs/assets/screenshots/admin-sites.jpg) |
+
+更多移动端和后台教程截图见[在线教程](https://minerchu.github.io/dongguaTV/#preview)。
+
 ## 功能
 
 - **多源聚合搜索**：并发查询多个 Maccms V10 JSON 接口，同一影片的多条线路自动合并。
 - **线路延迟显示**：详情页对每条线路调用测速接口，用颜色标示响应速度。
 - **TMDb 首页推荐**：本周趋势、华语、日韩、港台、正在热映、高分电影、今日播出。
 - **TMDb 影视详情**：演员、主创、分级、关键词、系列作品、YouTube 预告、相似推荐和分地区播放平台。
+- **搜索结果接 TMDb**：点击聚合搜索结果先显示影片资料，再选择播放线路，不再直接跳进播放器。
 - **TMDb 一键找片源**：详情页可直接用片名发起 Maccms 聚合搜索，同时查询 PanSou 网盘资源。
+- **可分享的页面地址**：搜索、影视详情和播放页分别有独立 URL，刷新和浏览器前进/后退都能恢复。
 - **TMDb 同源反代**：内置 `/tmdb` 代理，不需要自己的反代域名，前端也不会暴露 Key。
 - **网盘资源搜索**：接入 [PanSou](https://github.com/fish2018/pansou) 后，搜索结果页增加「网盘资源」标签。
 - **可视化后台**：添加、测试、编辑、启停、删除、批量导入采集站，不用手改文件。
@@ -83,6 +97,20 @@ TMDb Key 由服务端读取，前端不需要修改，也不会把 Key 写进网
 3. 在「采集站管理」填写站点名称和 Maccms JSON 接口地址，点「测试并添加」。
 4. 打开「使用教程」可查看接口格式、谷歌搜索关键词和验证方法。
 5. 网盘搜索：Compose / All-in-One 已自动连接 PanSou；Node.js 部署需要在后台「网盘搜索」填写地址，或配置 `PANSOU_URL`。
+
+## 页面地址
+
+页面不再始终停留在同一个地址。现在站内操作会同步更新浏览器地址栏：
+
+| 页面 | 地址示例 |
+| --- | --- |
+| 首页 | `http://服务器IP:3000/` |
+| 搜索 | `http://服务器IP:3000/search?wd=庆余年` |
+| 电影详情 | `http://服务器IP:3000/title/movie/671` |
+| 剧集详情 | `http://服务器IP:3000/title/tv/1399` |
+| 播放页 | `http://服务器IP:3000/watch?name=片名&site=站点key&id=影片ID` |
+
+这些地址可以直接刷新、复制分享，浏览器前进和后退也能恢复对应页面。Docker 对外端口由 `HOST_PORT` 决定；如果不希望在网址里看到 `:3100`，需要使用 Nginx / Caddy 把域名的 80/443 转发到这个端口，详见[修改端口与反向代理](https://minerchu.github.io/dongguaTV/#ports)。
 
 ## TMDb 反代（默认零配置）
 

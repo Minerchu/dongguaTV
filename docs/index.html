@@ -19,6 +19,7 @@
     <aside class="sidebar">
         <nav>
             <p class="nav-title">目录</p>
+            <a href="#preview">界面预览</a>
             <a href="#deploy">一、部署</a>
             <a href="#ports">二、修改端口</a>
             <a href="#first-run">三、首次使用</a>
@@ -45,6 +46,37 @@
             </div>
         </section>
 
+        <section id="preview">
+            <h2>界面预览</h2>
+            <p>截图来自实际运行的 Docker 测试实例。仓库与正式版不包含任何采集站地址，后台截图使用空白示例数据。</p>
+            <div class="preview-grid">
+                <figure class="preview-card wide">
+                    <a href="assets/screenshots/home-tmdb.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/home-tmdb.jpg" alt="冬瓜TV 首页 TMDb 推荐" loading="lazy"></a>
+                    <figcaption>首页：TMDb 热门、华语、日韩、港台、热映与高分推荐</figcaption>
+                </figure>
+                <figure class="preview-card">
+                    <a href="assets/screenshots/tmdb-detail.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/tmdb-detail.jpg" alt="TMDb 影视详情" loading="lazy"></a>
+                    <figcaption>详情：演员、主创、分级、关键词、预告与系列作品</figcaption>
+                </figure>
+                <figure class="preview-card">
+                    <a href="assets/screenshots/tmdb-providers.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/tmdb-providers.jpg" alt="TMDb 播放平台与相似推荐" loading="lazy"></a>
+                    <figcaption>在哪儿看：按地区显示播放平台，并给出相似推荐</figcaption>
+                </figure>
+                <figure class="preview-card">
+                    <a href="assets/screenshots/tmdb-mobile.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/tmdb-mobile.jpg" alt="移动端 TMDb 详情" loading="lazy"></a>
+                    <figcaption>手机端详情布局</figcaption>
+                </figure>
+                <figure class="preview-card">
+                    <a href="assets/screenshots/admin-sites.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/admin-sites.jpg" alt="后台采集站管理" loading="lazy"></a>
+                    <figcaption>后台采集站管理：测试、添加、批量导入和启停</figcaption>
+                </figure>
+                <figure class="preview-card wide">
+                    <a href="assets/screenshots/admin-guide.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/admin-guide.jpg" alt="后台使用教程" loading="lazy"></a>
+                    <figcaption>后台内置教程：接口格式、谷歌搜索关键词、验证和排错</figcaption>
+                </figure>
+            </div>
+        </section>
+
         <section id="deploy">
             <h2>一、部署</h2>
 
@@ -62,6 +94,16 @@ docker compose up -d --build</code></pre>
             </ul>
             <p>采集站和后台设置保存在 <code>./data/db.json</code>，<code>docker compose down</code>
             或重建容器都不会丢。</p>
+
+            <h3>页面地址可以直接分享</h3>
+            <p>搜索、影视详情和播放页现在都有独立地址，浏览器前进/后退和刷新都能恢复：</p>
+            <ul>
+                <li><code>/</code>：首页</li>
+                <li><code>/search?wd=庆余年</code>：聚合搜索结果</li>
+                <li><code>/title/movie/671</code>、<code>/title/tv/1399</code>：电影或剧集详情</li>
+                <li><code>/watch?name=片名&amp;site=站点key&amp;id=影片ID</code>：播放页</li>
+            </ul>
+            <p>Docker 的 <code>HOST_PORT</code> 只影响网址里是否带端口。不想显示 <code>:3100</code> 时，用 Nginx / Caddy 把域名代理到该端口即可，见下一节。</p>
 
             <h3>方式 B：单容器镜像（All-in-One）</h3>
             <p>主站和 PanSou 打进同一个镜像，只跑一个容器。适合不方便用 compose 的面板。</p>

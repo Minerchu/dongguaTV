@@ -146,6 +146,44 @@ main {
     border: 1px solid #fecaca;
 }
 
+.preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 18px;
+}
+
+.preview-card {
+    margin: 0;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.preview-card.wide {
+    grid-column: 1 / -1;
+}
+
+.preview-card a {
+    display: block;
+    background: #0b0b0b;
+}
+
+.preview-card img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.preview-card figcaption {
+    padding: 9px 12px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.5;
+    border-top: 1px solid var(--line);
+}
+
 section { padding-top: 10px; margin-bottom: 46px; }
 
 h2 {
@@ -274,4 +312,6 @@ footer {
     .topbar { padding: 0 18px; }
     .logo small { display: none; }
     pre .copy { opacity: 1; }
+    .preview-grid { grid-template-columns: 1fr; }
+    .preview-card.wide { grid-column: auto; }
 }

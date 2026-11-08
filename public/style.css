@@ -1136,6 +1136,23 @@ body.tmdb-open {
     line-height: 1.78;
 }
 
+.tmdb-source-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: -8px 0 18px;
+    padding: 7px 11px;
+    color: #c9c9c9;
+    font-size: 13px;
+    background: rgba(229, 9, 20, 0.12);
+    border: 1px solid rgba(229, 9, 20, 0.28);
+    border-radius: 6px;
+}
+
+.tmdb-source-note i {
+    color: var(--accent);
+}
+
 .tmdb-actions {
     display: flex;
     align-items: center;

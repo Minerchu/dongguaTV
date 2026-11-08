@@ -627,6 +627,10 @@ app.post('/api/admin/sites-legacy', requireAdmin, (req, res) => {
 
 writeDBIfMissing();
 
+app.get(['/search', '/title/:type/:id', '/watch'], (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+});
+
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`服务已启动: http://localhost:${PORT}`);
