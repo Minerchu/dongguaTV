@@ -807,39 +807,74 @@
                         .replace(/[\[\(（【][^\]\)）】]*[\]\)）】]/g, ' ')
                         .replace(/第[0-9一二三四五六七八九十]+[季部]/g, ' ')
                         .replace(/(?:19|20)\d{2}.*$/g, ' ')
-                        .replace(/(?:HD|BD|4K|1080P|720P|TC|TS|国语|粤语|中字|高清).*$/gi, ' ')
+                        .replace(/(?:HD|BD|4K|1080P|720P|TC|TS|国语|粤语|中字|高清|普通话|完整版|未删减|蓝光|WEB[- ]?DL).*$/gi, ' ')
                         .replace(/[._]+/g, ' ')
                         .replace(/\s+/g, ' ')
                         .trim();
                     return cleaned || String(name || '').trim();
                 },
+                tmdbSearchQueries(name) {
+                    const cleaned = this.tmdbSearchName(name);
+                    const queries = [];
+                    const add = (query) => {
+                        const value = String(query || '').replace(/\s+/g, ' ').trim();
+                        if (value.length > 1 && !queries.includes(value)) queries.push(value);
+                    };
+                    add(cleaned);
+                    const numbered = cleaned.match(/^(.+?)\s*\d+/);
+                    if (numbered) add(numbered[1]);
+                    add(cleaned.replace(/([\p{L}])[0-9]+(?=[\p{L}])/gu, '$1'));
+                    return queries.slice(0, 3);
+                },
                 normalizeTmdbTitle(name) {
                     return String(name || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
                 },
+                tmdbBigramOverlap(left, right) {
+                    const a = this.normalizeTmdbTitle(left);
+                    const b = this.normalizeTmdbTitle(right);
+                    if (!a || !b) return 0;
+                    if (a.length < 2 || b.length < 2) return a === b ? 1 : 0;
+                    const grams = (text) => {
+                        const set = new Set();
+                        for (let i = 0; i < text.length - 1; i++) set.add(text.slice(i, i + 2));
+                        return set;
+                    };
+                    const bGrams = grams(b);
+                    let overlap = 0;
+                    grams(a).forEach(gram => { if (bGrams.has(gram)) overlap++; });
+                    return overlap;
+                },
                 async findTmdbForSearch(name) {
-                    const query = this.tmdbSearchName(name);
-                    if (!query) return null;
-                    try {
-                        const res = await fetch(`${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(query)}&language=zh-CN`);
-                        if (!res.ok) return null;
-                        const data = await res.json();
-                        const base = this.normalizeTmdbTitle(query);
-                        const year = (String(name || '').match(/(?:19|20)\d{2}/) || [])[0] || '';
-                        const candidates = (data.results || []).filter(item =>
-                            item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv')
-                        ).map(item => {
-                            const title = this.normalizeTmdbTitle(this.tmdbTitleText(item));
-                            const date = String(item.release_date || item.first_air_date || '');
-                            let score = 0;
-                            if (title && (title === base || title.includes(base) || base.includes(title))) score += 100;
-                            if (year && date.startsWith(year)) score += 40;
-                            score += Math.min(20, Math.log10(Number(item.popularity || 1) + 1) * 5);
-                            return { item, score };
-                        }).sort((a, b) => b.score - a.score);
-                        return candidates.length ? candidates[0].item : null;
-                    } catch (error) {
-                        return null;
+                    const queries = this.tmdbSearchQueries(name);
+                    if (!queries.length) return null;
+                    const target = this.tmdbSearchName(name);
+                    const base = this.normalizeTmdbTitle(target);
+                    const year = (String(name || '').match(/(?:19|20)\d{2}/) || [])[0] || '';
+                    const results = [];
+                    for (const query of queries) {
+                        try {
+                            const res = await fetch(`${TMDB_BASE_URL}/search/multi?query=${encodeURIComponent(query)}&language=zh-CN`);
+                            if (!res.ok) continue;
+                            const data = await res.json();
+                            const valid = (data.results || []).filter(item =>
+                                item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv')
+                            );
+                            results.push(...valid);
+                            if (valid.length) break;
+                        } catch (error) { }
                     }
+                    const unique = new Map(results.map(item => [`${item.media_type}:${item.id}`, item]));
+                    const candidates = [...unique.values()].map(item => {
+                        const title = this.normalizeTmdbTitle(this.tmdbTitleText(item));
+                        const date = String(item.release_date || item.first_air_date || '');
+                        let score = 0;
+                        if (title && (title === base || title.includes(base) || base.includes(title))) score += 100;
+                        score += this.tmdbBigramOverlap(target, title) * 8;
+                        if (year && date.startsWith(year)) score += 40;
+                        score += Math.min(20, Math.log10(Number(item.popularity || 1) + 1) * 5);
+                        return { item, score };
+                    }).sort((a, b) => b.score - a.score);
+                    return candidates.length ? candidates[0].item : null;
                 },
                 async openSearchResult(group) {
                     if (!group || !Array.isArray(group.sources) || !group.sources.length) return;
