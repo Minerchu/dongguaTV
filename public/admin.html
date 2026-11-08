@@ -90,8 +90,8 @@
 
             <div class="card p-3 mb-3">
                 <h6 class="mb-2"><i class="fas fa-file-import text-danger me-1"></i>批量导入</h6>
-                <p class="text-muted small mb-2">每行一个，支持「名称,地址」或直接填地址。例如：<code>示例站,https://example.com/api.php/provide/vod</code></p>
-                <textarea class="form-control mono mb-2" rows="3" v-model="importText" placeholder="https://xxx.com/api.php/provide/vod&#10;https://yyy.com/api.php/provide/vod"></textarea>
+                    <p class="text-muted small mb-2">每行一个，支持「名称,地址」或直接填地址。例如：<code>示例站,https://example.com/api.php/provide/vod</code></p>
+                    <textarea class="form-control mono mb-2" rows="3" v-model="importText" placeholder="https://example.com/api.php/provide/vod&#10;https://example.org/api.php/provide/vod"></textarea>
                 <div class="d-flex gap-2 align-items-center">
                     <button class="btn btn-outline-danger btn-sm" :disabled="importing" @click="importSites">{{ importing ? '导入中...' : '批量导入' }}</button>
                     <span v-if="importResult" class="small" :class="importResult.failed ? 'text-warning' : 'ok'">

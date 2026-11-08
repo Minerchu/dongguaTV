@@ -11,7 +11,9 @@ const path = require('path');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_FILE = path.join(__dirname, 'db.json');
+const DATA_FILE = process.env.DB_PATH
+    ? path.resolve(process.env.DB_PATH)
+    : path.join(__dirname, 'db.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
@@ -39,6 +41,7 @@ function defaultDB() {
     return { sites: [], settings: defaultSettings(), version: 2 };
 }
 function atomicWrite(file, text) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + '.tmp';
     fs.writeFileSync(tmp, text, 'utf-8');
     fs.renameSync(tmp, file);

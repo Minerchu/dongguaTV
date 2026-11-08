@@ -2,12 +2,18 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+RUN apk add --no-cache ca-certificates tzdata
+
 COPY package*.json ./
-RUN npm install --production
+RUN npm install --omit=dev
 
 COPY . .
 
-RUN chmod +x /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh \
+    && mkdir -p /app/data
 
-# 使用自定义入口脚本
+ENV DB_PATH=/app/data/db.json
+
+EXPOSE 3000
+
 ENTRYPOINT ["/app/entrypoint.sh"]

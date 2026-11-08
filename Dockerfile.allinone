@@ -1,0 +1,35 @@
+# 单容器版：主站 + PanSou 网盘搜索在同一个镜像里
+# 构建: docker build -f Dockerfile.allinone -t dongguatv:allinone .
+# 运行: docker run -d --name dongguatv -p 3000:3000 \
+#         -v dongguatv-data:/app/data -e ADMIN_PASSWORD=你的密码 dongguatv:allinone
+#
+# 注意：构建阶段需要能拉取 ghcr.io/fish2018/pansou。拉不动时请用 docker-compose 方式，
+#      或先配置好镜像加速/代理。
+#
+# 直接以 PanSou 官方镜像为基础，才能完整继承它预置的 CHANNELS / ENABLED_PLUGINS，
+# 否则网盘搜索结果会少很多。只额外安装 Node.js 并叠加本项目。
+FROM ghcr.io/fish2018/pansou:latest
+
+ENV NODE_ENV=production \
+    PORT=3000 \
+    PANSOU_PORT=8888 \
+    PANSOU_EMBED=1 \
+    DB_PATH=/app/data/db.json \
+    TZ=Asia/Shanghai
+
+WORKDIR /app
+
+RUN apk add --no-cache nodejs npm ca-certificates tzdata
+
+COPY package*.json ./
+RUN npm install --omit=dev
+
+COPY . .
+
+RUN chmod +x /app/entrypoint.sh /app/entrypoint-allinone.sh \
+    && mkdir -p /app/data /app/cache
+
+EXPOSE 3000
+
+ENTRYPOINT ["/app/entrypoint-allinone.sh"]
+CMD []

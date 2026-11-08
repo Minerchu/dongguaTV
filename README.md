@@ -4,6 +4,8 @@
 
 ## 🌟 项目简介
 
+📖 **部署与使用教程（GitHub Pages）**：https://minerchu.github.io/dongguaTV/
+
 冬瓜TV是一个基于 Node.js 的视频聚合平台：搜索时并发查询你在后台添加的多个 Maccms 采集站，提供多源聚合、实时测速、网盘搜索等功能，让你轻松构建个人影视库。
 
 ## ✨ 核心功能
@@ -44,16 +46,50 @@ node server.js
 ```
 
 ### Docker 方式
+
+**方式 A：Docker Compose（推荐）**
+
 ```bash
-# 克隆项目
-git clone https://github.com/your-username/dongguaTV.git
+git clone https://github.com/Minerchu/dongguaTV.git
 cd dongguaTV
-# 编译并启动（会同时启动主站 + PanSou 网盘搜索）
+# 可选：复制配置模板并改密码 / 填 TMDB Key
+cp .env.example .env
+# 同时启动主站 + PanSou 网盘搜索
 docker compose up -d --build
 ```
 
 > 不需要网盘搜索：删掉 `docker-compose.yml` 里的 `pansou` 服务，并把 `PANSOU_URL` 留空即可。
 > 已经有自己的 PanSou：不用启动 `pansou` 服务，把 `PANSOU_URL` 改成你的地址。
+> 采集站配置保存在 `./data/db.json`，重建容器不会丢失。
+
+**方式 B：单容器 All-in-One**
+
+主站和 PanSou 打进一个镜像，适合宝塔 / 1Panel 这类面板：
+
+```bash
+docker build -f Dockerfile.allinone -t dongguatv:allinone .
+
+docker run -d --name dongguatv \
+  -p 3000:3000 \
+  -v dongguatv-data:/app/data \
+  -e ADMIN_PASSWORD=改成你的密码 \
+  -e TMDB_API_KEY=你的TMDb密钥 \
+  dongguatv:allinone
+```
+
+> PanSou 已经打进镜像，只在容器内部监听 8888，**不需要对外暴露 8888 端口**。
+> 不挂载 `/app/data` 也能启动，但删除容器后采集站配置会一起丢失。
+
+**修改端口**
+
+```yaml
+# docker-compose.yml
+ports:
+  - "8080:3000"   # 左边=宿主机端口，右边=容器端口
+```
+
+只想换访问端口就改左边；要连程序内部端口一起改，再加 `environment: - PORT=8080` 并把右边也改成 8080。
+完整说明见 [教程站点的「修改端口」章节](https://minerchu.github.io/dongguaTV/#ports)。
 ### 访问应用
 - 前端页面: http://localhost:3000
 - 后台管理: http://localhost:3000/admin.html
@@ -87,7 +123,6 @@ PUT    /api/admin/sites/:key         # 修改站点 / 启用状态 / 标识
 DELETE /api/admin/sites/:key         # 删除站点
 POST   /api/admin/sites/test         # 测试任意 Maccms 接口
 POST   /api/admin/sites/import       # 批量导入
-POST   /api/admin/sites/reset-defaults
 PUT    /api/admin/settings           # 保存 PanSou 地址 / Token / 开关
 POST   /api/admin/pansou/test        # 测试 PanSou 连通性
 ```
@@ -110,6 +145,7 @@ POST   /api/admin/pansou/test        # 测试 PanSou 连通性
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `PORT` | `3000` | 服务端口 |
+| `DB_PATH` | `./db.json` | 配置文件路径；Docker 镜像默认 `/app/data/db.json` |
 | `ADMIN_PASSWORD` | `admin` | 后台管理员密码，**生产环境务必修改** |
 | `TMDB_API_KEY` | 无 | TMDb API Key（Docker 启动时会注入到 index.html） |
 | `PANSOU_URL` | 无 | PanSou 服务地址，例如 `http://127.0.0.1:8888` |
@@ -120,6 +156,7 @@ POST   /api/admin/pansou/test        # 测试 PanSou 连通性
 | `PANSOU_TIMEOUT` | `15000` | 网盘搜索超时（毫秒） |
 
 后台里保存的 PanSou 地址/Token 会写入 `db.json`，**后台填写的地址优先**；`PANSOU_URL` 作为默认值，适合 Docker / 面板部署。
+使用 Docker 时 `db.json` 位于挂载出来的 `data/` 目录（容器内是 `/app/data/db.json`）。
 
 ### 站点配置
 站点配置保存在 `db.json`，正常情况下**不需要手动改文件**，请在后台增删改。
@@ -205,6 +242,17 @@ docker run -d --name pansou -p 8888:8888 ghcr.io/fish2018/pansou:latest
 - [ ] 添加播放历史同步功能
 - [ ] 支持多用户系统
 - [ ] 添加影视推荐算法
+
+## 📚 教程站点（GitHub Pages）
+
+教程源码在仓库的 `docs/` 目录，启用方式：
+
+1. 打开仓库 **Settings → Pages**
+2. Source 选择 **Deploy from a branch**
+3. 分支选 `main`，目录选 `/docs`，保存
+
+稍等一分钟即可访问 `https://<你的用户名>.github.io/dongguaTV/`。
+教程内容不含任何真实采集站地址，只有 `example.com` 占位示例。
 
 ## 📄 开源协议
 

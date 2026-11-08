@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>冬瓜TV 部署与使用教程</title>
+<meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索配置教程。">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍉</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+    <a class="logo" href="#top"><span>🍉</span> 冬瓜TV <small>部署与使用教程</small></a>
+    <a class="repo" href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
+</header>
+
+<div class="layout">
+    <aside class="sidebar">
+        <nav>
+            <p class="nav-title">目录</p>
+            <a href="#deploy">一、部署</a>
+            <a href="#ports">二、修改端口</a>
+            <a href="#first-run">三、首次使用</a>
+            <a href="#sites">四、添加采集站</a>
+            <a href="#pansou">五、网盘搜索</a>
+            <a href="#api">六、API 一览</a>
+            <a href="#faq">七、常见问题</a>
+            <a href="#notice">免责声明</a>
+        </nav>
+    </aside>
+
+    <main id="top">
+
+        <section class="hero">
+            <h1>冬瓜TV 部署与使用教程</h1>
+            <p>从零开始部署，到后台添加采集站、开启网盘搜索，一步一步来。</p>
+            <div class="hero-tags">
+                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span>
+            </div>
+            <div class="note">
+                本页只是静态教程，不运行任何后端。仓库和正式版本里<strong>不包含任何采集站地址</strong>，
+                需要按下面的方法自行添加。
+            </div>
+        </section>
+
+        <section id="deploy">
+            <h2>一、部署</h2>
+
+            <h3>方式 A：Docker Compose（推荐）</h3>
+            <p>会同时启动「主站」和「PanSou 网盘搜索」两个容器，适合绝大多数人。</p>
+<pre><code>git clone https://github.com/Minerchu/dongguaTV.git
+cd dongguaTV
+# 可选：复制配置模板，改管理员密码、填 TMDB Key
+cp .env.example .env
+docker compose up -d --build</code></pre>
+            <p>启动后访问：</p>
+            <ul>
+                <li>主站：<code>http://服务器IP:3000</code></li>
+                <li>后台：<code>http://服务器IP:3000/admin.html</code></li>
+            </ul>
+            <p>采集站和后台设置保存在 <code>./data/db.json</code>，<code>docker compose down</code>
+            或重建容器都不会丢。</p>
+
+            <h3>方式 B：单容器镜像（All-in-One）</h3>
+            <p>主站和 PanSou 打进同一个镜像，只跑一个容器。适合不方便用 compose 的面板。</p>
+<pre><code>docker build -f Dockerfile.allinone -t dongguatv:allinone .
+
+docker run -d --name dongguatv \
+  -p 3000:3000 \
+  -v dongguatv-data:/app/data \
+  -e ADMIN_PASSWORD=改成你自己的密码 \
+  -e TMDB_API_KEY=你的TMDB密钥 \
+  dongguatv:allinone</code></pre>
+            <p>PanSou 已内置，只在容器内部监听 8888，<strong>不需要也不建议把 8888 开到公网</strong>。</p>
+            <div class="warn">
+                构建时需要拉取 <code>ghcr.io/fish2018/pansou</code>。如果服务器拉不动，
+                请先用代理或镜像加速拉取，或者直接用方式 A 的 compose。
+            </div>
+
+            <h3>方式 C：不用 Docker（Node.js）</h3>
+<pre><code>npm install
+cp .env.example .env
+# 编辑 .env，至少填写 TMDB_API_KEY 和 ADMIN_PASSWORD
+npm start</code></pre>
+            <p>需要 Node.js 18 以上（推荐 20 / 22）。非 Docker 部署时，前端需要手动把
+            <code>public/index.html</code> 里的 <code>TMDB_API_KEY</code> 改成同一个 Key。</p>
+
+            <h3>需要准备的东西</h3>
+            <table>
+                <tr><th>项目</th><th>是否必须</th><th>说明</th></tr>
+                <tr><td>TMDb API Key</td><td>必须</td><td>到 TMDb 官网申请，用于海报、简介、评分</td></tr>
+                <tr><td>采集站接口</td><td>必须</td><td>在后台自行添加，格式见第四节</td></tr>
+                <tr><td>PanSou</td><td>可选</td><td>网盘搜索；compose / all-in-one 已经内置</td></tr>
+            </table>
+        </section>
+
+        <section id="ports">
+            <h2>二、修改端口</h2>
+            <p>先记住一句话：<strong>左边是宿主机端口，右边是容器端口</strong>。</p>
+<pre><code>ports:
+  - "8080:3000"
+#    ↑    ↑
+# 浏览器访问 8080
+#        容器里的程序仍然监听 3000</code></pre>
+
+            <h3>1. 只改访问端口（最常见）</h3>
+            <p>改 <code>docker-compose.yml</code> 里冒号左边的数字，然后重建容器：</p>
+<pre><code>ports:
+  - "8080:3000"</code></pre>
+<pre><code>docker compose up -d</code></pre>
+            <p>之后访问 <code>http://服务器IP:8080</code> 即可，程序内部不用改。</p>
+
+            <h3>2. 同时修改容器内部端口</h3>
+            <p>如果 3000 被别的程序占用，或者你想让程序本身也监听 8080：</p>
+<pre><code>ports:
+  - "8080:8080"
+environment:
+  - PORT=8080</code></pre>
+            <p>用 <code>docker run</code> 时同理：</p>
+<pre><code>docker run -d --name dongguatv \
+  -e PORT=8080 \
+  -p 8080:8080 \
+  dongguatv:allinone</code></pre>
+
+            <h3>3. PanSou 的端口（一般不用改）</h3>
+            <p>Compose 和 All-in-One 都让 PanSou 只在容器内部通信，
+            <strong>不需要对公网开放端口</strong>，平时不用改。只有容器内部端口冲突，
+            或你确实想单独访问 PanSou 时才需要动它。</p>
+            <p>Compose 方式（改完要让主站指向新端口）：</p>
+<pre><code>pansou:
+  environment:
+    - PORT=18888
+# 同时把主站的 PANSOU_URL 改成 http://pansou:18888</code></pre>
+            <p>All-in-One 方式（只改容器内部端口，不发布到宿主机）：</p>
+<pre><code>docker run -d --name dongguatv \
+  -p 3000:3000 \
+  -e PANSOU_PORT=18888 \
+  dongguatv:allinone</code></pre>
+            <div class="note">
+                All-in-One 镜像会自动把 <code>PANSOU_URL</code> 指向容器内的
+                <code>http://127.0.0.1:${PANSOU_PORT}</code>，你不用手动改。
+            </div>
+
+            <h3>4. 不用 Docker 时</h3>
+            <p>编辑项目根目录的 <code>.env</code>：</p>
+<pre><code>PORT=8080</code></pre>
+            <p>或者临时启动：</p>
+<pre><code>PORT=8080 node server.js</code></pre>
+
+            <h3>5. 用 Nginx 反向代理（可选）</h3>
+            <p>想用域名 + 80/443 访问，可以让 Nginx 转发到 3000：</p>
+<pre><code>server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}</code></pre>
+        </section>
+
+        <section id="first-run">
+            <h2>三、首次使用</h2>
+            <ol>
+                <li>打开 <code>http://服务器IP:端口/admin.html</code></li>
+                <li>输入管理员密码。默认是 <code>admin</code></li>
+                <li>登录后先做两件事：改密码、加采集站</li>
+            </ol>
+
+            <h3>修改管理员密码</h3>
+            <p>在 <code>docker-compose.yml</code> 或 <code>.env</code> 里改：</p>
+<pre><code>ADMIN_PASSWORD=一个复杂密码</code></pre>
+            <pre><code>docker compose up -d</code></pre>
+            <div class="warn">
+                默认密码 <code>admin</code> 只能用于本地测试。部署到公网前必须改掉。
+            </div>
+        </section>
+
+        <section id="sites">
+            <h2>四、添加采集站</h2>
+            <p>
+                项目里<strong>不内置任何采集站</strong>，也不在 GitHub 上保存任何站点地址。
+                你需要自己找公开的 <strong>Maccms V10 JSON 接口</strong>，然后在后台添加。
+            </p>
+
+            <h3>1. 正确格式长什么样</h3>
+            <p>不是网站首页，也不是播放页，而是接口地址，通常以这些形式结尾：</p>
+<pre><code>https://example.com/api.php/provide/vod
+https://example.com/inc/apijson.php</code></pre>
+
+            <h3>2. 怎么找</h3>
+            <p>在 Google 里搜索下面任意一个关键词组合：</p>
+            <ul>
+                <li><code>"api.php/provide/vod"</code></li>
+                <li><code>inurl:"api.php/provide/vod"</code></li>
+                <li><code>maccms 采集接口</code></li>
+                <li><code>"inc/apijson.php"</code></li>
+            </ul>
+            <p>也可以搜「影视采集站 分享」「Maccms 资源站 接口」等中文关键词。</p>
+
+            <h3>3. 验证能不能用</h3>
+            <p>把地址复制到浏览器，后面加上 <code>?ac=list&amp;pg=1</code>：</p>
+<pre><code>https://example.com/api.php/provide/vod?ac=list&amp;pg=1</code></pre>
+            <p>看到这样的 JSON 就说明格式正确：</p>
+<pre><code>{
+  "code": 1,
+  "msg": "数据列表",
+  "list": [
+    { "vod_id": 123, "vod_name": "示例电影", "vod_pic": "https://..." }
+  ]
+}</code></pre>
+            <p>如果看到的是一整页网页、XML、404 或 500，就换一个。</p>
+
+            <h3>4. 添加到后台</h3>
+            <ol>
+                <li>打开「采集站管理」</li>
+                <li>填站点名称和接口地址</li>
+                <li>点「测试并添加」，显示「连接正常」就成功了</li>
+                <li>多个站点可以用「批量导入」，每行一个</li>
+            </ol>
+<pre><code>我的资源站,https://example.com/api.php/provide/vod
+另一个站,https://example.org/inc/apijson.php</code></pre>
+
+            <div class="warn">
+                添加后的地址只保存在服务器本地的 <code>db.json</code>（已在 <code>.gitignore</code> 中），
+                <strong>不要把自己的 db.json 上传到 GitHub</strong>，也不要截图公开接口地址。
+            </div>
+        </section>
+
+        <section id="pansou">
+            <h2>五、网盘搜索（PanSou）</h2>
+            <p>
+                PanSou 是一个独立的 Go 服务，负责搜索 Telegram 频道和网盘插件。
+                本项目的 Compose 和 All-in-One 镜像<strong>已经把它打包进去</strong>，不需要你单独部署。
+            </p>
+            <div class="note">
+                <strong>不用重新搭建，也不用改 Go 代码。</strong>
+                方式 A 是一条 <code>docker compose up -d</code> 同时起两个容器；
+                方式 B 是同一个镜像里跑两个进程。两种方式第一次启动就可用。
+            </div>
+
+            <h3>Compose 方式</h3>
+            <p><code>docker compose up -d</code> 会同时启动 <code>pansou</code> 容器，
+            主站通过 <code>PANSOU_URL=http://pansou:8888</code> 自动连接，后台不用填地址。</p>
+
+            <h3>All-in-One 方式</h3>
+            <p>镜像内部会自动启动 PanSou，并设置好 <code>PANSOU_URL</code>，开箱即用。</p>
+
+            <h3>使用已有的 PanSou</h3>
+            <pre><code># 不启动自带的 pansou 服务，把地址改成你自己的
+PANSOU_URL=http://你的地址:8888</code></pre>
+            <p>也可以在后台「网盘搜索」页填写地址、Token、开关，点保存即可。</p>
+
+            <h3>访问不了 Telegram？</h3>
+            <p>给 pansou 容器配置代理：</p>
+<pre><code>pansou:
+  environment:
+    - PROXY=socks5://host.docker.internal:7890
+    - HTTPS_PROXY=http://host.docker.internal:7890
+    - HTTP_PROXY=http://host.docker.internal:7890</code></pre>
+
+            <h3>检索结果太少？</h3>
+            <p>PanSou 默认频道/插件有限，可以在 compose 里覆盖它自己的环境变量：
+            <code>CHANNELS</code>、<code>ENABLED_PLUGINS</code>。具体取值见
+            <a href="https://github.com/fish2018/pansou" target="_blank" rel="noopener">PanSou 文档</a>。</p>
+        </section>
+
+        <section id="api">
+            <h2>六、API 一览</h2>
+            <p>这些是本项目自己的接口，供前端或二次开发使用：</p>
+<pre><code>GET  /api/config                     # 前台配置
+GET  /api/search?wd=关键词            # 聚合搜索（影视）
+GET  /api/cloud/search?wd=关键词      # 网盘搜索
+GET  /api/detail?site_key=站点key&amp;id=影片ID
+GET  /api/hot                        # 热门推荐
+GET  /api/check?key=站点key           # 站点测速</code></pre>
+            <p>管理接口需要先登录（HttpOnly Cookie 或 <code>X-Admin-Token</code>）：</p>
+<pre><code>POST   /api/admin/login
+GET    /api/admin/sites
+POST   /api/admin/sites
+PUT    /api/admin/sites/:key
+DELETE /api/admin/sites/:key
+POST   /api/admin/sites/test
+POST   /api/admin/sites/import
+PUT    /api/admin/settings
+POST   /api/admin/pansou/test</code></pre>
+        </section>
+
+        <section id="faq">
+            <h2>七、常见问题</h2>
+            <details>
+                <summary>启动后搜索没有任何结果？</summary>
+                <p>先确认后台已经添加了采集站并且处于「启用」状态。新安装默认是空的。</p>
+            </details>
+            <details>
+                <summary>添加时提示「不是 Maccms JSON 接口」？</summary>
+                <p>说明地址不是 JSON 采集接口。检查是不是少了 <code>/api.php/provide/vod</code>，或者返回的是网页/XML。</p>
+            </details>
+            <details>
+                <summary>搜索很慢？</summary>
+                <p>关掉响应慢的站点，或者减少启用数量。默认单站 6 秒超时，可用 <code>SEARCH_TIMEOUT</code> 调整。</p>
+            </details>
+            <details>
+                <summary>忘记后台密码了？</summary>
+                <p>改 <code>ADMIN_PASSWORD</code> 环境变量后重启容器即可。</p>
+            </details>
+            <details>
+                <summary>网盘搜索显示暂不可用？</summary>
+                <p>检查 pansou 容器是否在运行、服务器能否访问 Telegram、代理是否正确。</p>
+            </details>
+            <details>
+                <summary>更新版本后站点数据会丢吗？</summary>
+                <p>Compose 默认把 <code>./data</code> 挂到 <code>/app/data</code>，
+                数据在宿主机的 <code>data/db.json</code>，重建容器不会丢。
+                用 <code>docker run</code> 时请加 <code>-v dongguatv-data:/app/data</code>；
+                没有挂载的话，删除容器会一起删掉配置。</p>
+            </details>
+            <details>
+                <summary>必须单独安装 PanSou 吗？</summary>
+                <p>不需要。Compose 和 All-in-One 都自带 PanSou。只有你想用自己的 PanSou
+                实例时，才需要把 <code>PANSOU_URL</code> 改成那个地址。</p>
+            </details>
+            <details>
+                <summary>怎么备份？</summary>
+                <p>备份 <code>data/db.json</code> 即可，里面包含采集站和网盘配置。</p>
+            </details>
+        </section>
+
+        <section id="notice">
+            <h2>免责声明</h2>
+            <p>
+                本项目仅作为 Node.js 的学习项目开源，不存储、不发布、不参与任何影视内容的制作与传播。
+                采集站、网盘资源均由第三方提供，本项目只做技术聚合。
+            </p>
+            <p>请只接入你有权使用的接口，并遵守当地法律法规。请支持正版影视内容。</p>
+        </section>
+
+        <footer>
+            <p>冬瓜TV · 教程站点（GitHub Pages）</p>
+            <p><a href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener">返回仓库</a></p>
+        </footer>
+    </main>
+</div>
+
+<script>
+document.querySelectorAll('pre').forEach(function (pre) {
+    var btn = document.createElement('button');
+    btn.className = 'copy';
+    btn.type = 'button';
+    btn.textContent = '复制';
+    btn.addEventListener('click', function () {
+        var text = pre.querySelector('code') ? pre.querySelector('code').innerText : pre.innerText;
+        var done = function () { btn.textContent = '已复制'; setTimeout(function () { btn.textContent = '复制'; }, 1500); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
+        } else { fallback(text, done); }
+    });
+    pre.style.position = 'relative';
+    pre.appendChild(btn);
+});
+
+function fallback(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
+}
+
+var links = Array.prototype.slice.call(document.querySelectorAll('.sidebar a'));
+var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+function onScroll() {
+    var y = window.scrollY + 120;
+    var current = sections[0];
+    sections.forEach(function (s) { if (s && s.offsetTop <= y) current = s; });
+    links.forEach(function (a) {
+        a.classList.toggle('active', current && a.getAttribute('href') === '#' + current.id);
+    });
+}
+window.addEventListener('scroll', onScroll);
+onScroll();
+</script>
+</body>
+</html>

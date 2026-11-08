@@ -1,0 +1,6 @@
+# Shell 脚本和容器文件必须保持 LF，否则在 Windows 检出后 Docker 会启动失败
+*.sh text eol=lf
+Dockerfile text eol=lf
+Dockerfile.* text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

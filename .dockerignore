@@ -1,4 +1,14 @@
+.git
 .gitignore
+.gitattributes
+.env
+node_modules
+npm-debug.log
+db.json
+data
+pansou-cache
+docs
+README.md
 docker-compose.yml
 Dockerfile
-README.md
+Dockerfile.allinone

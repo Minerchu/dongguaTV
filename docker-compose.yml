@@ -1,27 +1,39 @@
 services:
   dongguatv:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: dongguatv
     restart: unless-stopped
     ports:
+      # 左边是宿主机端口，右边是容器端口；只想换访问端口时改左边即可
       - "3000:3000"
+    volumes:
+      # 采集站配置和后台设置都保存在这里，重建容器也不会丢
+      - ./data:/app/data
     environment:
       - PORT=3000
-      - TMDB_API_KEY=key
-      # 生产环境务必修改
-      - ADMIN_PASSWORD=admin
+      - DB_PATH=/app/data/db.json
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      # 生产环境务必修改（也可以在 .env 里设置）
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       # 和下面的 pansou 服务在同一个 compose 网络里
       - PANSOU_URL=http://pansou:8888
     depends_on:
       - pansou
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/config"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
-  # 网盘搜索（可选）。不需要的话把这一整段删掉，或把上面的 PANSOU_URL 留空。
+  # 网盘搜索（可选）。不需要的话删掉这一整段，并把上面的 PANSOU_URL 留空。
+  # 只在 compose 内部访问，不需要对公网开放端口。
   pansou:
     image: ghcr.io/fish2018/pansou:latest
     container_name: pansou
     restart: unless-stopped
-    ports:
-      - "8888:8888"
     # 服务器无法直连 Telegram 时，取消注释并填代理：
     # environment:
     #   - PROXY=socks5://host.docker.internal:7890
