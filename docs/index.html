@@ -105,10 +105,12 @@ npm start</code></pre>
 #        容器里的程序仍然监听 3000</code></pre>
 
             <h3>1. 只改访问端口（最常见）</h3>
-            <p>改 <code>docker-compose.yml</code> 里冒号左边的数字，然后重建容器：</p>
+            <p>推荐在 <code>.env</code> 里改 <code>HOST_PORT</code>，容器内部端口和内置反代都不用动：</p>
+<pre><code>HOST_PORT=8080</code></pre>
+<pre><code>docker compose up -d</code></pre>
+            <p>也可以直接改 <code>docker-compose.yml</code> 里冒号左边的数字：</p>
 <pre><code>ports:
   - "8080:3000"</code></pre>
-<pre><code>docker compose up -d</code></pre>
             <p>之后访问 <code>http://服务器IP:8080</code> 即可，程序内部不用改。</p>
 
             <h3>2. 同时修改容器内部端口</h3>

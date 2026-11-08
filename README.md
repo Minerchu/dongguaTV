@@ -120,6 +120,18 @@ All-in-One 则直接把同样的变量写成 `-e HTTPS_PROXY=...`。
 
 ### 只改访问端口
 
+推荐在 `.env` 里改 `HOST_PORT`，容器内部端口和内置反代都不用动：
+
+```env
+HOST_PORT=8080
+```
+
+```bash
+docker compose up -d
+```
+
+也可以直接改 `docker-compose.yml`：
+
 ```yaml
 # docker-compose.yml
 ports:

@@ -9,7 +9,7 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       # 左边是宿主机端口，右边是容器端口；只想换访问端口时改左边即可
-      - "3000:3000"
+      - "${HOST_PORT:-3000}:3000"
     volumes:
       # 采集站配置和后台设置都保存在这里，重建容器也不会丢
       - ./data:/app/data
