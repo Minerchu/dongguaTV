@@ -16,6 +16,10 @@
 | --- | --- |
 | ![播放平台与推荐](docs/assets/screenshots/tmdb-providers.jpg) | ![采集站管理](docs/assets/screenshots/admin-sites.jpg) |
 
+| 手机端搜索 | 手机端详情 |
+| --- | --- |
+| ![手机端搜索结果](docs/assets/screenshots/mobile-search-results.jpg) | ![手机端 TMDb 详情](docs/assets/screenshots/mobile-tmdb-detail.jpg) |
+
 更多移动端和后台教程截图见[在线教程](https://minerchu.github.io/dongguaTV/#preview)。
 
 ## 功能
