@@ -49,7 +49,8 @@
         </nav>
 
         <!-- 1. Hero Carousel -->
-        <div id="heroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-interval="6000">
+        <div id="heroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-interval="6000"
+            v-if="!searched">
             <div class="carousel-inner" v-if="heroList.length > 0">
                 <div class="carousel-item" v-for="(item, index) in heroList" :key="index"
                     :class="{ active: index === 0 }">
@@ -72,7 +73,7 @@
         </div>
 
         <!-- 2. Search -->
-        <div class="search-section">
+        <div class="search-section" :class="{ 'search-active': searched }">
             <div class="search-box-wrapper">
                 <i class="fas fa-search search-icon" @click="doSearch"></i>
                 <input type="text" v-model="keyword" @keyup.enter="doSearch" class="search-input"
@@ -1099,9 +1100,12 @@
                 autoSearch(name) {
                     this.keyword = name;
                     this.doSearch();
-                    setTimeout(() => {
-                        document.getElementById('search-result-anchor').scrollIntoView({ behavior: 'smooth' });
-                    }, 100);
+                },
+                scrollToSearchResults() {
+                    this.$nextTick(() => {
+                        const anchor = document.getElementById('search-result-anchor');
+                        if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
                 },
                 clearSearch(updateRoute = true) {
                     this.searched = false;
@@ -1110,7 +1114,10 @@
                     this.activeTab = 'video';
                     this.cloudResults = [];
                     this.cloudError = '';
-                    if (updateRoute !== false) setAppRoute('/');
+                    if (updateRoute !== false) {
+                        setAppRoute('/');
+                        this.$nextTick(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+                    }
                 },
                 async fetchConfig() {
                     try {
@@ -1131,6 +1138,7 @@
                     this.cloudMessage = '';
                     this.cloudError = '';
                     this.cloudLoading = this.cloudEnabled;
+                    this.scrollToSearchResults();
                     const cloudPromise = this.searchCloud(kw);
                     try {
                         const res = await fetch(`/api/search?wd=${encodeURIComponent(kw)}`);

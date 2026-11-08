@@ -193,6 +193,16 @@ body {
         padding: 8px 20px;
         font-size: 1rem;
     }
+
+    .search-section.search-active {
+        margin-top: 64px;
+        padding: 0 4%;
+    }
+
+    .search-section.search-active .search-input {
+        height: 52px;
+        font-size: 16px;
+    }
 }
 
 /* 搜索框 */
@@ -202,6 +212,15 @@ body {
     z-index: 20;
     padding: 0 5%;
     margin-bottom: 40px;
+}
+
+.search-section.search-active {
+    margin-top: 72px;
+    margin-bottom: 24px;
+}
+
+#search-result-anchor {
+    scroll-margin-top: 88px;
 }
 
 .search-box-wrapper {
