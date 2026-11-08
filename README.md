@@ -11,7 +11,7 @@
 
 - 在线教程：https://minerchu.github.io/dongguaTV/
 - 后台入口：`http://服务器IP:3000/admin.html`
-- 技术栈：Node.js + Express，前端 Vue 3 + Bootstrap（CDN）
+- 技术栈：Node.js + Express，前端 Vue 3 + Bootstrap（CDN），Android 原生客户端 Kotlin + Jetpack Compose + Media3
 
 ## 界面预览
 
@@ -43,6 +43,9 @@
 - **可视化后台**：添加、测试、编辑、启停、删除、批量导入采集站，不用手改文件。
 - **后台使用教程**：内置接口格式、谷歌搜索关键词、验证方法和常见问题。
 - **PanSou 配置**：后台可填写地址和 Token，并测试连通性。
+- **原生 Android 客户端**：Kotlin + Compose 原生界面，不是 WebView 套壳；直接调用本站 API，使用 Media3 / ExoPlayer 播放 HLS。
+- **后台定制并自动编译 APK**：后台可设置应用名称、图标、版本号、服务器地址；保存后由服务器自动生成带独立签名的 APK。
+- **首页下载入口**：APK 生成成功后自动出现在首页，访客可直接下载安装。
 - **不内置采集站**：仓库和正式版不包含任何第三方采集站地址。
 - **配置持久化**：站点和设置保存在 JSON 文件；Docker 使用 `data/` 目录或数据卷。
 - **后台鉴权**：HttpOnly Cookie 或 `X-Admin-Token`，登录失败有频率限制。
@@ -108,6 +111,31 @@ TMDb Key 由服务端读取，前端不需要修改，也不会把 Key 写进网
 3. 在「采集站管理」填写站点名称和 Maccms JSON 接口地址，点「测试并添加」。
 4. 打开「使用教程」可查看接口格式、谷歌搜索关键词和验证方法。
 5. 网盘搜索：Compose / All-in-One 已自动连接 PanSou；Node.js 部署需要在后台「网盘搜索」填写地址，或配置 `PANSOU_URL`。
+
+## Android 原生客户端（后台自动编译）
+
+> 使用标准 `Dockerfile` / `docker compose` 部署时，Android APK 的编译环境已经集成在镜像里。第一次构建镜像需要下载 Android SDK 和 Gradle 依赖，会明显比普通 Node 镜像慢；之后就绪后不需要用户安装 Android Studio、JDK 或 SDK。
+
+### 生成步骤
+
+1. 先到后台「采集站管理」添加至少一个可用的 Maccms JSON 接口。
+2. 打开后台「Android 客户端」。
+3. 填写客户端名称，上传正方形 PNG 图标（任意尺寸，浏览器会自动裁剪成 512×512）。
+4. 填写手机能访问的服务器地址，例如 `https://tv.example.com` 或 `http://192.168.1.10:3000`。
+5. 点击「保存并生成 APK」，等待状态变成「已生成」。通常需要 1–3 分钟。
+6. 在后台或首页点击「下载 APK」，安装到 Android 手机。
+
+客户端启动后直接读取内置的服务器地址；如果地址不可用，也可以在客户端设置页手动修改。
+
+### 注意事项
+
+- 服务器地址必须是**手机实际能访问的地址**。在 Docker 里不要填 `127.0.0.1`、容器名或容器内部端口。
+- 使用反向代理时，填代理后的 HTTPS 域名；内置 API、TMDb 图片代理和播放接口都会走同一个域名。
+- APK 签名保存在 `data/android-client/`。更新服务时请保留整个 `data/` 目录，否则重新生成的 APK 可能无法覆盖安装。
+- 每次修改名称、图标、版本或服务器地址并保存后，服务器会自动排队重新编译。后台会显示编译状态和错误信息。
+- 编译失败时可查看日志：`docker compose logs -f dongguatv`。
+- **All-in-One 单容器镜像不包含自动 APK 编译组件**。需要 Android 客户端时请使用 `docker compose` 或标准 `Dockerfile` 部署。
+- 仓库不包含任何 APK 模板二进制文件；模板在构建 Docker 镜像时由 `android/` 源码编译生成。
 
 ## 页面地址
 

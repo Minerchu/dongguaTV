@@ -1436,3 +1436,82 @@ body.tmdb-open {
     .tmdb-cast-photo { width: 72px; height: 72px; }
     .tmdb-rec-card { width: 108px; flex-basis: 108px; }
 }
+
+.android-download-wrap {
+    max-width: 1180px;
+    margin: 20px auto 4px;
+    padding: 0 24px;
+}
+
+.android-download-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 15px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 16px;
+    background: linear-gradient(110deg, rgba(246, 18, 29, 0.17), rgba(20, 20, 24, 0.96) 36%, #141418);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+}
+
+.android-download-icon {
+    width: 46px;
+    height: 46px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: 13px;
+    color: #fff;
+    font-size: 25px;
+    background: #f6121d;
+    box-shadow: 0 8px 22px rgba(246, 18, 29, 0.32);
+}
+
+.android-download-copy {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.android-download-copy strong {
+    color: #fff;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.android-download-copy span {
+    color: #a5a5ad;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.android-download-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    color: #fff !important;
+    background: #f6121d;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none !important;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.android-download-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px rgba(246, 18, 29, 0.34);
+}
+
+@media (max-width: 640px) {
+    .android-download-wrap { padding: 0 14px; margin-top: 14px; }
+    .android-download-card { gap: 11px; padding: 12px; }
+    .android-download-icon { width: 40px; height: 40px; font-size: 22px; }
+    .android-download-copy strong { font-size: 13px; }
+    .android-download-copy span { font-size: 10.5px; }
+    .android-download-btn { padding: 9px 12px; font-size: 11px; }
+}

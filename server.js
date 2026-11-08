@@ -8,6 +8,7 @@ const cors = require('cors');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { buildApk, isAvailable: isApkBuilderAvailable } = require('./apk-builder');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -15,6 +16,10 @@ const DATA_FILE = process.env.DB_PATH
     ? path.resolve(process.env.DB_PATH)
     : path.join(__dirname, 'db.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const DATA_DIR = path.dirname(DATA_FILE);
+const CLIENT_DIR = path.join(DATA_DIR, 'android-client');
+const APP_APK_FILE = path.join(CLIENT_DIR, 'donggua-tv.apk');
+const APP_ICON_FILE = path.join(CLIENT_DIR, 'icon.png');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
 const TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT) || 5000;
@@ -41,11 +46,40 @@ app.use(express.static(PUBLIC_DIR));
 
 
 // ========== 数据库 ==========
+function defaultClientSettings() {
+    return {
+        appName: '冬瓜TV',
+        serverUrl: '',
+        versionName: '1.0.0',
+        versionCode: 1,
+        iconVersion: 0,
+        buildStatus: 'idle',
+        buildMessage: '',
+        builtAt: '',
+        apkSize: 0,
+        apkSha256: '',
+        appliedServerUrl: '',
+        appliedAppName: '',
+        appliedVersionName: '',
+        appliedVersionCode: 0,
+        appliedIconVersion: 0
+    };
+}
 function defaultSettings() {
-    return { pansouUrl: '', pansouToken: '', pansouEnabled: true };
+    return { pansouUrl: '', pansouToken: '', pansouEnabled: true, client: defaultClientSettings() };
+}
+function normalizeSettings(input) {
+    const source = input && typeof input === 'object' ? input : {};
+    const merged = Object.assign(defaultSettings(), source);
+    merged.client = Object.assign(defaultClientSettings(), source.client || {});
+    const versionCode = Number(merged.client.versionCode);
+    merged.client.versionCode = Number.isFinite(versionCode) && versionCode > 0 ? Math.floor(versionCode) : 1;
+    merged.client.apkSize = Number(merged.client.apkSize) || 0;
+    merged.client.iconVersion = Number(merged.client.iconVersion) || 0;
+    return merged;
 }
 function defaultDB() {
-    return { sites: [], settings: defaultSettings(), version: 2 };
+    return { sites: [], settings: defaultSettings(), version: 3 };
 }
 function atomicWrite(file, text) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -58,7 +92,7 @@ function readDB() {
         const raw = fs.readFileSync(DATA_FILE, 'utf-8').replace(/^\uFEFF/, '');
         const data = JSON.parse(raw);
         if (!data || !Array.isArray(data.sites)) return defaultDB();
-        data.settings = Object.assign(defaultSettings(), data.settings || {});
+        data.settings = normalizeSettings(data.settings);
         return data;
     } catch (e) {
         return defaultDB();
@@ -66,11 +100,162 @@ function readDB() {
 }
 function getDB() { return readDB(); }
 function saveDB(data) {
-    data.settings = Object.assign(defaultSettings(), data.settings || {});
+    data.settings = normalizeSettings(data.settings);
     atomicWrite(DATA_FILE, JSON.stringify(data, null, 2));
 }
 function writeDBIfMissing() {
     if (!fs.existsSync(DATA_FILE)) saveDB(defaultDB());
+}
+
+// ========== Android 客户端构建 ==========
+const buildState = { running: false, queued: false };
+
+function normalizeClientServerUrl(raw) {
+    let value = cleanText(raw, 400).replace(/\/+$/, '');
+    if (!value) return '';
+    if (!/^https?:\/\//i.test(value)) value = 'http://' + value;
+    let parsed;
+    try { parsed = new URL(value); } catch (e) { throw new Error('服务器地址格式不正确'); }
+    if (!parsed.hostname) throw new Error('服务器地址缺少域名');
+    parsed.hash = '';
+    parsed.search = '';
+    return parsed.toString().replace(/\/+$/, '');
+}
+
+function clientArtifactReady(client) {
+    if (!client || !client.serverUrl || !fs.existsSync(APP_APK_FILE)) return false;
+    return client.appliedServerUrl === client.serverUrl
+        && client.appliedAppName === client.appName
+        && String(client.appliedVersionName) === String(client.versionName)
+        && Number(client.appliedVersionCode) === Number(client.versionCode)
+        && Number(client.appliedIconVersion) === Number(client.iconVersion);
+}
+
+function updateClientState(patch) {
+    const db = getDB();
+    db.settings.client = Object.assign(db.settings.client, patch || {});
+    saveDB(db);
+    return db.settings.client;
+}
+
+function publicAndroidState() {
+    const client = getDB().settings.client;
+    const available = clientArtifactReady(client);
+    return {
+        available,
+        name: client.appName,
+        version: client.versionName,
+        size: client.apkSize,
+        builtAt: client.builtAt,
+        downloadUrl: available ? '/api/app/download' : ''
+    };
+}
+
+async function runClientBuildLoop() {
+    try {
+        do {
+            buildState.queued = false;
+            const client = getDB().settings.client;
+            if (!client.serverUrl) {
+                updateClientState({ buildStatus: 'idle', buildMessage: '尚未填写服务器地址' });
+                break;
+            }
+            updateClientState({ buildStatus: 'building', buildMessage: '正在生成 APK，请稍候…' });
+            const snapshot = {
+                appName: client.appName,
+                serverUrl: client.serverUrl,
+                versionName: client.versionName,
+                versionCode: client.versionCode,
+                iconVersion: client.iconVersion,
+                iconPath: fs.existsSync(APP_ICON_FILE) ? APP_ICON_FILE : ''
+            };
+            try {
+                const result = await buildApk({ android: snapshot, dataDir: DATA_DIR });
+                const latest = getDB().settings.client;
+                const latestMatches = latest.serverUrl === snapshot.serverUrl
+                    && latest.appName === snapshot.appName
+                    && Number(latest.versionCode) === Number(snapshot.versionCode)
+                    && latest.versionName === snapshot.versionName
+                    && Number(latest.iconVersion) === Number(snapshot.iconVersion);
+                updateClientState({
+                    buildStatus: latestMatches ? 'success' : 'stale',
+                    buildMessage: latestMatches ? 'APK 已生成，可下载' : '配置在构建期间发生变化，将自动重新生成',
+                    builtAt: new Date().toISOString(),
+                    apkSize: result.size,
+                    apkSha256: result.sha256,
+                    appliedServerUrl: snapshot.serverUrl,
+                    appliedAppName: snapshot.appName,
+                    appliedVersionName: snapshot.versionName,
+                    appliedVersionCode: snapshot.versionCode,
+                    appliedIconVersion: snapshot.iconVersion
+                });
+                if (!latestMatches) buildState.queued = true;
+            } catch (error) {
+                const message = String(error && error.message ? error.message : error).slice(0, 1200);
+                updateClientState({ buildStatus: 'failed', buildMessage: message });
+                console.error('[Android Build]', message);
+            }
+        } while (buildState.queued);
+    } finally {
+        buildState.running = false;
+        if (buildState.queued) requestClientBuild();
+    }
+}
+
+function requestClientBuild() {
+    if (!isApkBuilderAvailable()) {
+        updateClientState({
+            buildStatus: 'failed',
+            buildMessage: '当前镜像缺少 APK 构建组件。请使用项目提供的 Docker 镜像重新构建。'
+        });
+        return false;
+    }
+    if (buildState.running) {
+        buildState.queued = true;
+        return true;
+    }
+    buildState.running = true;
+    setTimeout(runClientBuildLoop, 80);
+    return true;
+}
+
+function resetInterruptedBuild() {
+    const client = getDB().settings.client;
+    if (client.buildStatus === 'building') {
+        updateClientState({ buildStatus: 'idle', buildMessage: '上次构建被中断，准备重新生成' });
+    }
+}
+
+function maybeBuildOnStartup() {
+    const client = getDB().settings.client;
+    if (client.serverUrl && !clientArtifactReady(client)) requestClientBuild();
+}
+
+function validatePng(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 33) throw new Error('请选择有效的 PNG 图片');
+    const signature = buffer.subarray(0, 8);
+    const expected = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+    if (!signature.equals(expected)) throw new Error('图标必须是 PNG 格式');
+    if (buffer.subarray(12, 16).toString('ascii') !== 'IHDR') throw new Error('PNG 文件结构不正确');
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    if (width < 48 || height < 48) throw new Error('图标至少需要 48×48 像素');
+    if (width > 2048 || height > 2048) throw new Error('图标不能超过 2048×2048 像素');
+    return { width, height };
+}
+
+function adminClientState() {
+    const client = getDB().settings.client;
+    return {
+        ...client,
+        artifactReady: clientArtifactReady(client),
+        buildRunning: buildState.running,
+        buildQueued: buildState.queued,
+        builderAvailable: isApkBuilderAvailable(),
+        iconUrl: fs.existsSync(APP_ICON_FILE) ? `/api/app/icon?v=${client.iconVersion}` : '',
+        downloadUrl: clientArtifactReady(client) ? '/api/app/download' : '',
+        apkPath: fs.existsSync(APP_APK_FILE) ? APP_APK_FILE : ''
+    };
 }
 
 // ========== 工具 ==========
@@ -341,10 +526,34 @@ app.get('/tmdb/t/p/*', async (req, res) => {
 
 // ========== 公共 API ==========
 app.get('/api/config', (req, res) => {
+    const db = getDB();
     res.json({
-        cloudEnabled: Boolean(pansouBase()) && getDB().settings.pansouEnabled !== false,
-        siteCount: getDB().sites.filter(s => s.active).length
+        cloudEnabled: Boolean(pansouBase()) && db.settings.pansouEnabled !== false,
+        siteCount: db.sites.filter(s => s.active !== false).length,
+        android: publicAndroidState()
     });
+});
+
+app.get('/api/app/icon', (req, res) => {
+    if (!fs.existsSync(APP_ICON_FILE)) return res.status(404).end();
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.type('png');
+    fs.createReadStream(APP_ICON_FILE).pipe(res);
+});
+
+app.get('/api/app/download', (req, res) => {
+    const client = getDB().settings.client;
+    if (!clientArtifactReady(client) || !fs.existsSync(APP_APK_FILE)) {
+        return res.status(404).json({ error: 'APK 还没有生成完成' });
+    }
+    const displayName = cleanText(client.appName, 40).replace(/[\\/:*?"<>|\r\n]/g, '') || 'DongguaTV';
+    const asciiName = displayName.replace(/[^\x20-\x7E]/g, '').trim() || 'donggua-tv';
+    const stat = fs.statSync(APP_APK_FILE);
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Length', String(stat.size));
+    res.setHeader('Content-Disposition', `attachment; filename="${asciiName}.apk"; filename*=UTF-8''${encodeURIComponent(displayName + '.apk')}`);
+    res.setHeader('Cache-Control', 'no-store');
+    fs.createReadStream(APP_APK_FILE).pipe(res);
 });
 
 app.get('/api/sites', (req, res) => {
@@ -491,6 +700,64 @@ app.get('/api/admin/sites', requireAdmin, (req, res) => {
     res.json({ sites: db.sites, settings: db.settings });
 });
 
+app.get('/api/admin/client', requireAdmin, (req, res) => {
+    res.json({ success: true, client: adminClientState() });
+});
+
+app.put('/api/admin/client', requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const db = getDB();
+    try {
+        const previous = db.settings.client;
+        const appName = cleanText(body.appName, 40) || previous.appName;
+        const serverUrl = normalizeClientServerUrl(body.serverUrl !== undefined ? body.serverUrl : previous.serverUrl);
+        const versionName = cleanText(body.versionName, 24) || previous.versionName;
+        if (!/^[0-9A-Za-z][0-9A-Za-z._-]{0,23}$/.test(versionName)) {
+            return res.status(400).json({ success: false, error: '版本号只能包含字母、数字、点和下划线' });
+        }
+        const rawCode = Number(body.versionCode !== undefined ? body.versionCode : previous.versionCode);
+        const versionCode = Number.isFinite(rawCode) ? Math.max(1, Math.min(2100000000, Math.floor(rawCode))) : 1;
+        Object.assign(db.settings.client, { appName, serverUrl, versionName, versionCode });
+        if (!serverUrl) Object.assign(db.settings.client, { buildStatus: 'idle', buildMessage: '填写服务器地址后会自动生成 APK' });
+        saveDB(db);
+        const current = getDB().settings.client;
+        const queued = serverUrl && !clientArtifactReady(current) ? requestClientBuild() : false;
+        res.json({ success: true, client: adminClientState(), queued });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/admin/client/build', requireAdmin, (req, res) => {
+    const client = getDB().settings.client;
+    if (!client.serverUrl) return res.status(400).json({ success: false, error: '请先填写并保存服务器地址' });
+    const queued = requestClientBuild();
+    res.json({ success: queued, client: adminClientState(), queued });
+});
+
+app.post('/api/admin/client/icon', requireAdmin, express.raw({ type: ['image/png', 'application/octet-stream'], limit: '3mb' }), (req, res) => {
+    try {
+        const buffer = req.body;
+        validatePng(buffer);
+        fs.mkdirSync(CLIENT_DIR, { recursive: true });
+        const temp = APP_ICON_FILE + '.tmp';
+        fs.writeFileSync(temp, buffer);
+        fs.renameSync(temp, APP_ICON_FILE);
+        const client = updateClientState({ iconVersion: Date.now() });
+        const queued = client.serverUrl ? requestClientBuild() : false;
+        res.json({ success: true, client: adminClientState(), queued });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+app.delete('/api/admin/client/icon', requireAdmin, (req, res) => {
+    try { fs.rmSync(APP_ICON_FILE, { force: true }); } catch (e) { }
+    const client = updateClientState({ iconVersion: Date.now() });
+    const queued = client.serverUrl ? requestClientBuild() : false;
+    res.json({ success: true, client: adminClientState(), queued });
+});
+
 app.post('/api/admin/sites', requireAdmin, async (req, res) => {
     const db = getDB();
     const name = cleanText(req.body.name, 40);
@@ -632,10 +899,12 @@ app.get(['/search', '/title/:type/:id', '/watch'], (req, res) => {
 });
 
 if (require.main === module) {
+    resetInterruptedBuild();
     app.listen(PORT, () => {
         console.log(`服务已启动: http://localhost:${PORT}`);
         console.log(`后台管理: http://localhost:${PORT}/admin.html`);
         if (!process.env.ADMIN_PASSWORD) console.warn('[安全提示] 正在使用默认后台密码 admin，请设置环境变量 ADMIN_PASSWORD');
+        setTimeout(maybeBuildOnStartup, 1500);
     });
 }
 

@@ -29,7 +29,7 @@ services:
     depends_on:
       - pansou
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/config"]
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/config"]
       interval: 30s
       timeout: 5s
       retries: 3

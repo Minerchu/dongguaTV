@@ -81,6 +81,19 @@
             </div>
         </div>
 
+        <div v-if="androidApp && androidApp.available && !searched" class="android-download-wrap">
+            <div class="android-download-card">
+                <div class="android-download-icon"><i class="fab fa-android"></i></div>
+                <div class="android-download-copy">
+                    <strong>{{ androidApp.name || '冬瓜TV' }} Android 客户端</strong>
+                    <span>原生播放器 · 搜索 / 详情 / 网盘资源 · v{{ androidApp.version }}</span>
+                </div>
+                <a class="android-download-btn" :href="androidApp.downloadUrl" download>
+                    <i class="fas fa-download"></i> 下载 APK
+                </a>
+            </div>
+        </div>
+
         <div v-if="!searched">
             <!-- 3. TMDb Movies -->
             <div class="section-container animate__animated animate__fadeInUp" v-if="movieList.length > 0">
@@ -704,7 +717,8 @@
                     tmdbProviderMap: {}, tmdbProviders: null, tmdbRegion: detectTmdbRegion(),
                     tmdbRegionOptions: TMDB_REGION_OPTIONS, tmdbRequestSeq: 0,
                     tmdbAgeRating: '', tmdbKeywords: [], tmdbCollectionParts: [],
-                    tmdbSearchGroup: null, tmdbReturnRoute: '/', tmdbSearchSeq: 0
+                    tmdbSearchGroup: null, tmdbReturnRoute: '/', tmdbSearchSeq: 0,
+                    androidApp: null
                 }
             },
             mounted() {
@@ -1165,6 +1179,7 @@
                         const res = await fetch('/api/config');
                         const data = await res.json();
                         this.cloudEnabled = Boolean(data.cloudEnabled);
+                        this.androidApp = data.android || null;
                     } catch (e) { this.cloudEnabled = false; }
                 },
                 async doSearch(updateRoute = true) {

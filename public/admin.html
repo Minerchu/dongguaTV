@@ -22,6 +22,13 @@
     pre.code { background:#111827; color:#e5e7eb; border-radius:10px; padding:14px 16px; font-size:12.5px; overflow:auto; }
     .hint { background:#fff7ed; border-left:3px solid #f59e0b; padding:10px 14px; border-radius:6px; font-size:13.5px; }
     .ok { color:#059669; } .bad { color:#dc2626; }
+    .client-icon-preview { width:92px; height:92px; border-radius:22px; overflow:hidden; flex:0 0 auto;
+        display:flex; align-items:center; justify-content:center; color:#9ca3af; font-size:34px;
+        background:#111827; border:1px solid #e5e7eb; }
+    .client-icon-preview img { width:100%; height:100%; object-fit:cover; }
+    .client-step { display:flex; gap:12px; margin-bottom:14px; font-size:13px; color:#4b5563; }
+    .client-step span { width:24px; height:24px; flex:0 0 auto; border-radius:50%; display:flex;
+        align-items:center; justify-content:center; color:#fff; background:#dc2626; font-size:12px; font-weight:700; }
     .sticky-tools { position:sticky; top:0; z-index:5; background:#f5f6f8; padding:.75rem 0; }
     .tag { font-size:11px; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#4338ca; }
     .site-row td { background:#fff; }
@@ -62,6 +69,7 @@
         <ul class="nav nav-pills gap-2 mb-4">
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='sites'}" @click="tab='sites'"><i class="fas fa-database me-1"></i>采集站管理</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='cloud'}" @click="tab='cloud'"><i class="fas fa-cloud me-1"></i>网盘搜索</button></li>
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='client'}" @click="openClientTab"><i class="fab fa-android me-1"></i>Android 客户端</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='guide'}" @click="tab='guide'"><i class="fas fa-circle-question me-1"></i>使用教程</button></li>
         </ul>
 
@@ -205,6 +213,119 @@
             </div>
         </div>
 
+        <!-- Android 客户端 -->
+        <div v-show="tab==='client'">
+            <div class="row g-3">
+                <div class="col-lg-7">
+                    <div class="card p-4">
+                        <h6 class="mb-1"><i class="fab fa-android text-danger me-1"></i>原生 Android 客户端</h6>
+                        <p class="text-muted small mb-4">
+                            客户端直接调用本站 API，使用原生播放器，不是网页套壳。设置名称、图标和服务器地址后，服务器会自动生成带独立签名的 APK。
+                        </p>
+                        <div v-if="sites.length===0" class="alert alert-warning py-2 small">
+                            <i class="fas fa-triangle-exclamation me-1"></i>
+                            你还没有添加采集站。建议先到「采集站管理」添加至少一个 Maccms 接口，否则客户端搜索为空。
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <label class="form-label small text-muted">应用名称</label>
+                                <input class="form-control" v-model.trim="client.appName" maxlength="40" placeholder="冬瓜TV">
+                            </div>
+                            <div class="col-md-7">
+                                <label class="form-label small text-muted">服务器地址（手机必须能访问）</label>
+                                <div class="input-group">
+                                    <input class="form-control mono" v-model.trim="client.serverUrl" placeholder="https://tv.example.com">
+                                    <button class="btn btn-outline-secondary" type="button" @click="useCurrentOrigin">用当前地址</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mt-1">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted">版本名称</label>
+                                <input class="form-control mono" v-model.trim="client.versionName" maxlength="24" placeholder="1.0.0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted">版本号（整数）</label>
+                                <input class="form-control mono" type="number" min="1" v-model.number="client.versionCode" placeholder="1">
+                            </div>
+                            <div class="col-md-4 d-flex align-items-end">
+                                <span class="small text-muted">修改版本号可用于覆盖更新安装</span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-3 mt-4">
+                            <div class="client-icon-preview">
+                                <img v-if="client.iconUrl" :src="client.iconUrl" alt="客户端图标">
+                                <i v-else class="fas fa-mobile-screen-button"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="small fw-semibold mb-1">客户端图标</div>
+                                <div class="small text-muted mb-2">建议上传 512×512 的 PNG，浏览器会自动裁剪为正方形。</div>
+                                <input ref="iconInput" type="file" accept="image/png,image/jpeg,image/webp" class="d-none" @change="uploadIcon">
+                                <button class="btn btn-outline-secondary btn-sm me-1" type="button" @click="pickIcon" :disabled="client.buildRunning">
+                                    <i class="fas fa-upload me-1"></i>选择图片
+                                </button>
+                                <button v-if="client.iconUrl" class="btn btn-outline-danger btn-sm" type="button" @click="removeIcon" :disabled="client.buildRunning">
+                                    恢复默认图标
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2 mt-4">
+                            <button class="btn btn-danger" type="button" @click="saveClient" :disabled="clientSaving || client.buildRunning">
+                                <i class="fas fa-hammer me-1"></i>{{ clientSaving ? '保存中...' : '保存并生成 APK' }}
+                            </button>
+                            <button class="btn btn-outline-secondary" type="button" @click="rebuildClient" :disabled="client.buildRunning || !client.serverUrl">
+                                <i class="fas fa-rotate me-1"></i>重新生成
+                            </button>
+                            <a v-if="client.artifactReady" class="btn btn-outline-success" :href="client.downloadUrl" target="_blank">
+                                <i class="fas fa-download me-1"></i>下载 APK
+                            </a>
+                        </div>
+
+                        <div v-if="clientMessage" class="alert mt-3 mb-0 py-2 small" :class="clientMessage.ok ? 'alert-success' : 'alert-danger'">
+                            {{ clientMessage.text }}
+                        </div>
+                        <div v-if="client.buildRunning || client.buildQueued" class="alert alert-warning mt-3 mb-0 py-2 small">
+                            <i class="fas fa-spinner fa-spin me-1"></i>
+                            {{ client.buildMessage || '正在生成 APK，通常需要 1-3 分钟，请不要关闭服务。' }}
+                        </div>
+                        <div v-else-if="client.buildStatus==='failed'" class="alert alert-danger mt-3 mb-0 py-2 small">
+                            <i class="fas fa-circle-xmark me-1"></i>生成失败：{{ client.buildMessage }}
+                        </div>
+                        <div v-else-if="client.artifactReady" class="alert alert-success mt-3 mb-0 py-2 small">
+                            <i class="fas fa-circle-check me-1"></i>
+                            已生成 v{{ client.versionName }}，大小 {{ formatSize(client.apkSize) }}，首页已显示下载入口。
+                        </div>
+                        <div v-else-if="client.serverUrl" class="alert alert-secondary mt-3 mb-0 py-2 small">
+                            等待生成。保存配置后会自动排队。
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="card p-4 mb-3">
+                        <h6 class="mb-3"><i class="fas fa-list-check text-danger me-1"></i>使用步骤</h6>
+                        <div class="client-step"><span>1</span><div>先到「采集站管理」添加至少一个可用的 Maccms JSON 接口。</div></div>
+                        <div class="client-step"><span>2</span><div>填写应用名称，上传正方形 PNG 图标。</div></div>
+                        <div class="client-step"><span>3</span><div>服务器地址必须是手机能访问的地址，建议使用已经配置好的 HTTPS 域名。</div></div>
+                        <div class="client-step"><span>4</span><div>点击「保存并生成 APK」，等待状态变成已生成。</div></div>
+                        <div class="client-step"><span>5</span><div>在首页或本页下载 APK，安装到 Android 手机即可。</div></div>
+                    </div>
+                    <div class="card p-4">
+                        <h6 class="mb-2"><i class="fas fa-shield-halved text-danger me-1"></i>签名与更新</h6>
+                        <p class="small text-muted mb-2">
+                            APK 使用本站自动生成并保存在 <code>data/android-client</code> 的签名。重新生成时保持同一份数据目录，才能覆盖安装更新。
+                        </p>
+                        <p class="small text-muted mb-0">
+                            如果通过反向代理部署，请在地址中填写代理后的域名，例如 <code>https://tv.example.com</code>，不要填容器内部地址。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 教程 -->
         <div v-show="tab==='guide'" class="card p-4">
             <h5 class="mb-4"><i class="fas fa-graduation-cap text-danger me-1"></i>如何找到并添加采集站</h5>
@@ -293,6 +414,13 @@ createApp({
         return {
             loggedIn: false, password: '', loginError: '', loggingIn: false,
             tab: 'sites', sites: [], settings: { pansouUrl: '', pansouToken: '', pansouEnabled: true },
+            client: {
+                appName: '冬瓜TV', serverUrl: '', versionName: '1.0.0', versionCode: 1,
+                iconVersion: 0, iconUrl: '', buildStatus: 'idle', buildMessage: '',
+                buildRunning: false, buildQueued: false, artifactReady: false,
+                apkSize: 0, downloadUrl: ''
+            },
+            clientSaving: false, clientMessage: null, clientTimer: null,
             status: {}, testingAll: false,
             form: { name: '', api: '' }, formResult: null, adding: false,
             importText: '', importing: false, importResult: null,
@@ -302,7 +430,7 @@ createApp({
     computed: {
         activeCount() { return this.sites.filter(s => s.active).length; }
     },
-    mounted() { this.checkLogin(); },
+        mounted() { this.checkLogin(); },
     methods: {
         async api(url, options) {
             const res = await fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, options || {}));
@@ -314,21 +442,22 @@ createApp({
         async checkLogin() {
             try {
                 const { data } = await this.api('/api/admin/me');
-                if (data.loggedIn) { this.loggedIn = true; await this.loadSites(); }
+                if (data.loggedIn) { this.loggedIn = true; await this.loadSites(); await this.loadClient(); }
             } catch (e) { }
         },
         async login() {
             this.loginError = ''; this.loggingIn = true;
             try {
                 const { res, data } = await this.api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password: this.password }) });
-                if (data.success) { this.loggedIn = true; this.password = ''; await this.loadSites(); }
+                if (data.success) { this.loggedIn = true; this.password = ''; await this.loadSites(); await this.loadClient(); }
                 else this.loginError = data.error || (res.status === 429 ? '尝试次数过多' : '密码不正确');
             } catch (e) { this.loginError = '无法连接服务器'; }
             this.loggingIn = false;
         },
         async logout() {
             try { await this.api('/api/admin/logout', { method: 'POST' }); } catch (e) { }
-            this.loggedIn = false; this.sites = [];
+            if (this.clientTimer) { clearTimeout(this.clientTimer); this.clientTimer = null; }
+            this.loggedIn = false; this.sites = []; this.clientMessage = null;
         },
         async loadSites() {
             const { data } = await this.api('/api/admin/sites');
@@ -336,6 +465,146 @@ createApp({
                 this.sites = data.sites.map(s => Object.assign({}, s, { _originalKey: s.key }));
                 this.settings = Object.assign({ pansouUrl: '', pansouToken: '', pansouEnabled: true }, data.settings || {});
             }
+        },
+        openClientTab() {
+            this.tab = 'client';
+            if (!this.client.serverUrl) this.client.serverUrl = window.location.origin;
+            this.loadClient().catch(() => { });
+        },
+        async loadClient() {
+            const { data } = await this.api('/api/admin/client');
+            if (data.client) {
+                this.client = Object.assign({}, this.client, data.client);
+                if (this.client.buildRunning || this.client.buildQueued) this.startClientPoll();
+            }
+        },
+        startClientPoll() {
+            if (this.clientTimer) return;
+            this.clientTimer = setTimeout(async () => {
+                this.clientTimer = null;
+                try { await this.loadClient(); } catch (e) { }
+            }, 2500);
+        },
+        useCurrentOrigin() {
+            this.client.serverUrl = window.location.origin;
+        },
+        async saveClient() {
+            if (!this.client.appName) return alert('请填写应用名称');
+            if (!this.client.serverUrl) return alert('请填写手机能访问的服务器地址');
+            this.clientSaving = true;
+            this.clientMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/client', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        appName: this.client.appName,
+                        serverUrl: this.client.serverUrl,
+                        versionName: this.client.versionName,
+                        versionCode: this.client.versionCode
+                    })
+                });
+                if (data.success) {
+                    this.client = Object.assign({}, this.client, data.client);
+                    this.clientMessage = { ok: true, text: data.queued ? '配置已保存，正在自动生成 APK。' : '配置已保存。' };
+                    if (this.client.buildRunning || this.client.buildQueued) this.startClientPoll();
+                } else {
+                    this.clientMessage = { ok: false, text: data.error || '保存失败' };
+                }
+            } catch (e) {
+                this.clientMessage = { ok: false, text: e.message || '保存失败' };
+            }
+            this.clientSaving = false;
+        },
+        async rebuildClient() {
+            this.clientMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/client/build', { method: 'POST' });
+                if (data.success) {
+                    this.client = Object.assign({}, this.client, data.client);
+                    this.clientMessage = { ok: true, text: '已重新排队生成 APK。' };
+                    this.startClientPoll();
+                } else {
+                    this.clientMessage = { ok: false, text: data.error || '无法开始生成' };
+                }
+            } catch (e) {
+                this.clientMessage = { ok: false, text: e.message || '无法开始生成' };
+            }
+        },
+        pickIcon() {
+            if (this.$refs.iconInput) this.$refs.iconInput.click();
+        },
+        async uploadIcon(event) {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+            if (!file.type || !file.type.startsWith('image/')) return alert('请选择图片文件');
+            if (file.size > 8 * 1024 * 1024) return alert('图片不能超过 8MB');
+            let source;
+            try {
+                source = await createImageBitmap(file);
+            } catch (e) {
+                source = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    const objectUrl = URL.createObjectURL(file);
+                    img.onload = () => { URL.revokeObjectURL(objectUrl); resolve(img); };
+                    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('无法读取图片')); };
+                    img.src = objectUrl;
+                });
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#0b0b0c';
+            ctx.fillRect(0, 0, 512, 512);
+            const scale = Math.max(512 / source.width, 512 / source.height);
+            const width = source.width * scale;
+            const height = source.height * scale;
+            ctx.drawImage(source, (512 - width) / 2, (512 - height) / 2, width, height);
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+            if (!blob) return alert('处理图片失败');
+            this.clientSaving = true;
+            this.clientMessage = null;
+            try {
+                const res = await fetch('/api/admin/client/icon', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'image/png' },
+                    body: blob
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 401) this.loggedIn = false;
+                if (data.success) {
+                    this.client = Object.assign({}, this.client, data.client);
+                    this.clientMessage = { ok: true, text: data.queued ? '图标已上传，正在自动重新生成 APK。' : '图标已上传。' };
+                    if (this.client.buildRunning || this.client.buildQueued) this.startClientPoll();
+                } else {
+                    this.clientMessage = { ok: false, text: data.error || '图标上传失败' };
+                }
+            } catch (e) {
+                this.clientMessage = { ok: false, text: e.message || '图标上传失败' };
+            }
+            this.clientSaving = false;
+        },
+        async removeIcon() {
+            try {
+                const { data } = await this.api('/api/admin/client/icon', { method: 'DELETE' });
+                if (data.success) {
+                    this.client = Object.assign({}, this.client, data.client);
+                    this.clientMessage = { ok: true, text: data.queued ? '已恢复默认图标，正在重新生成 APK。' : '已恢复默认图标。' };
+                    if (this.client.buildRunning || this.client.buildQueued) this.startClientPoll();
+                } else {
+                    this.clientMessage = { ok: false, text: data.error || '操作失败' };
+                }
+            } catch (e) {
+                this.clientMessage = { ok: false, text: e.message || '操作失败' };
+            }
+        },
+        formatSize(bytes) {
+            const value = Number(bytes) || 0;
+            if (value >= 1024 * 1024) return (value / 1024 / 1024).toFixed(1) + ' MB';
+            if (value >= 1024) return (value / 1024).toFixed(0) + ' KB';
+            return value + ' B';
         },
         async addSite(withTest) {
             if (!this.form.name || !this.form.api) return alert('请填写站点名称和 API 地址');

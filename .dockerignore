@@ -12,3 +12,12 @@ README.md
 docker-compose.yml
 Dockerfile
 Dockerfile.allinone
+android/.gradle
+android/.kotlin
+android/app/build
+android/build
+android/local.properties
+server-assets
+*.apk
+*.jks
+*.keystore
