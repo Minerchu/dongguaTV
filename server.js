@@ -16,6 +16,7 @@ const playback = require('./playback');
 const backup = require('./backup');
 const { createAdapterRegistry } = require('./adapters');
 const tmdb = require('./tmdb');
+const probe = require('./probe');
 const QRCode = require('qrcode');
 
 const app = express();
@@ -535,7 +536,7 @@ async function testApi(input) {
     }
 }
 
-const healthMonitor = health.createHealthMonitor({ check: testApi });
+const healthMonitor = health.createHealthMonitor({ check: site => probe.pingSite(site, { timeout: TEST_TIMEOUT }) });
 
 function invalidateCatalogCache() {
     searchCache.clear();
@@ -758,27 +759,11 @@ app.get('/api/sites', (req, res) => {
 app.get('/api/check', async (req, res) => {
     const key = cleanText(req.query.key, 60);
     const site = getDB().sites.find(s => s.key === key);
-    if (!site) return res.json({ latency: 9999, ok: false });
-    const started = Date.now();
-    try {
-        if (site.adapter) {
-            const result = await adapterRegistry.test(site.adapter, site);
-            const latency = Date.now() - started;
-            const ok = Boolean(result && result.ok !== false);
-            if (ok) healthMonitor.recordSuccess(key, latency);
-            else healthMonitor.recordFailure(key, result && result.message);
-            return res.json(Object.assign({ latency: ok ? latency : 9999, ok }, result || {}));
-        }
-        const resp = await axios.get(withQuery(site.api, 'ac=list&pg=1'), { timeout: 3000, validateStatus: () => true });
-        const latency = Date.now() - started;
-        const ok = Boolean(parseMaccmsList(resp.data));
-        if (ok) healthMonitor.recordSuccess(key, latency);
-        else healthMonitor.recordFailure(key, '接口没有返回 Maccms JSON');
-        res.json({ latency: ok ? latency : 9999, ok });
-    } catch (e) {
-        healthMonitor.recordFailure(key, e.message);
-        res.json({ latency: 9999, ok: false });
-    }
+    if (!site) return res.json({ latency: 9999, ok: false, probe: 'ping' });
+    const result = await probe.pingSite(site, { timeout: Math.min(TEST_TIMEOUT, 5000) });
+    if (result.ok) healthMonitor.recordSuccess(key, result.latency);
+    else healthMonitor.recordFailure(key, result.message);
+    res.json(Object.assign({}, result, { latency: result.ok ? result.latency : 9999 }));
 });
 
 app.get('/api/hot', async (req, res) => {
@@ -786,7 +771,6 @@ app.get('/api/hot', async (req, res) => {
     if (cached) return res.json(cached);
     const sites = searchableSites().sites.filter(site => site.api).slice(0, 8);
     for (const site of sites) {
-        const started = Date.now();
         try {
             const response = await axios.get(withQuery(site.api, 'ac=list&pg=1&h=24&out=json'), {
                 timeout: 4000,
@@ -794,14 +778,11 @@ app.get('/api/hot', async (req, res) => {
             });
             const list = parseMaccmsList(response.data);
             if (list && list.length > 0) {
-                healthMonitor.recordSuccess(site.key, Date.now() - started);
                 const payload = { list: list.slice(0, 12).map(item => Object.assign({}, item, { site_key: site.key, site_name: site.name })) };
                 cacheSet(hotCache, 'hot', payload, 5 * 60 * 1000);
                 return res.json(payload);
             }
-            healthMonitor.recordFailure(site.key, '热榜接口没有返回列表');
         } catch (e) {
-            healthMonitor.recordFailure(site.key, e.message);
         }
     }
     res.json({ list: [] });
@@ -822,7 +803,6 @@ app.get('/api/search', async (req, res) => {
         try {
             if (site.adapter) {
                 const list = await adapterRegistry.search(site.adapter, site, wd);
-                healthMonitor.recordSuccess(site.key, Date.now() - started);
                 return list.map(item => Object.assign({}, item, {
                     site_key: site.key,
                     site_name: site.name,
@@ -837,10 +817,8 @@ app.get('/api/search', async (req, res) => {
             const list = parseMaccmsList(response.data);
             if (!Array.isArray(list)) {
                 errors++;
-                healthMonitor.recordFailure(site.key, '接口没有返回列表');
                 return [];
             }
-            healthMonitor.recordSuccess(site.key, Date.now() - started);
             return list.map(item => ({
                 ...item,
                 site_key: site.key,
@@ -849,7 +827,6 @@ app.get('/api/search', async (req, res) => {
             }));
         } catch (e) {
             errors++;
-            healthMonitor.recordFailure(site.key, e.code === 'ECONNABORTED' ? '连接超时' : e.message);
             return [];
         }
     });
@@ -872,18 +849,14 @@ app.get('/api/detail', async (req, res) => {
     const id = cleanText(req.query.id, 60);
     const targetSite = getDB().sites.find(s => s.key === siteKey);
     if (!targetSite) return res.status(404).json({ error: 'Site not found' });
-    const started = Date.now();
     try {
         if (targetSite.adapter) {
             const data = await adapterRegistry.detail(targetSite.adapter, targetSite, id);
-            healthMonitor.recordSuccess(siteKey, Date.now() - started);
             return res.json(data);
         }
         const response = await axios.get(withQuery(targetSite.api, 'ac=detail&ids=' + encodeURIComponent(id) + '&out=json'), { timeout: 8000 });
-        healthMonitor.recordSuccess(siteKey, Date.now() - started);
         res.json(response.data);
     } catch (e) {
-        healthMonitor.recordFailure(siteKey, e.message);
         res.status(502).json({ error: 'Source Error' });
     }
 });

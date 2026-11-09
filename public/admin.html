@@ -181,12 +181,12 @@
             <div class="sticky-tools d-flex justify-content-between align-items-center">
                 <div class="small text-muted">
                     共 {{ sites.length }} 个，启用 {{ activeCount }} 个（地址只保存在本站 db.json，不会进 Git 仓库）
-                    <span v-if="testingAll" class="ms-2"><i class="fas fa-spinner fa-spin"></i> 正在测速...</span>
-                    <span v-if="healthLastRun" class="ms-2 text-muted">· 上次巡检 {{ formatDateTime(healthLastRun) }}</span>
+                    <span v-if="testingAll" class="ms-2"><i class="fas fa-spinner fa-spin"></i> 正在 PING...</span>
+                    <span v-if="healthLastRun" class="ms-2 text-muted">· 上次 PING 检测 {{ formatDateTime(healthLastRun) }}</span>
                 </div>
                 <div class="d-flex gap-2">
-                    <button class="btn btn-outline-secondary btn-sm" :disabled="testingAll" @click="testAll"><i class="fas fa-gauge-high me-1"></i>全部测速</button>
-                    <button class="btn btn-outline-success btn-sm" :disabled="healthRunning" @click="checkHealthAll"><i class="fas fa-heart-pulse me-1"></i>{{ healthRunning ? '巡检中...' : '自动巡检' }}</button>
+                    <button class="btn btn-outline-secondary btn-sm" :disabled="testingAll" @click="testAll"><i class="fas fa-gauge-high me-1"></i>全部 PING</button>
+                    <button class="btn btn-outline-success btn-sm" :disabled="healthRunning" @click="checkHealthAll"><i class="fas fa-heart-pulse me-1"></i>{{ healthRunning ? 'PING 中...' : 'PING 巡检' }}</button>
                     <button class="btn btn-outline-secondary btn-sm" @click="exportSites"><i class="fas fa-download me-1"></i>导出</button>
                 </div>
             </div>
@@ -719,22 +719,23 @@ https://example.com/inc/apijson.php</pre>
                 </div>
 
                 <div class="step">
-                    <h6>播放代理与自动切源</h6>
+                    <h6>播放代理与线路切换</h6>
                     <p class="small text-muted mb-2">
                         前台播放会先经过本站的 <code>/api/play/proxy</code>，由服务器补上 Referer 和浏览器 UA，再重写 m3u8 分片地址。
                         这样能解决大部分 403、CORS 和分片跨域问题。
                     </p>
                     <p class="small text-muted mb-0">
-                        如果当前线路仍然播放失败，播放器会自动尝试同一影片的下一条线路，最多切换 3 次。
+                        当前线路播放失败时只提示手动切换，不会自动换源。
                         代理只允许公网 http/https 地址，内网和本机地址会被拒绝。
                     </p>
                 </div>
 
                 <div class="step">
-                    <h6>健康巡检</h6>
+                    <h6>PING 巡检</h6>
                     <p class="small text-muted mb-0">
-                        服务每 10 分钟自动检查一次启用的采集站。连续失败 3 次的站点会临时冷却 5 分钟，之后自动重新参与搜索；
-                        不会永久关闭。后台「采集站管理」会显示延迟、成功率和冷却剩余时间，也可以点「自动巡检」立即检查。
+                        服务每 10 分钟对启用的采集站做一次 HTTP PING。连续失败 3 次的站点会临时冷却 5 分钟，之后自动重新参与搜索；
+                        不会永久关闭。后台「采集站管理」会显示延迟、成功率和冷却剩余时间，也可以点「PING 巡检」立即检查。
+                        PING 只代表站点能连通，不保证接口一定返回可播放的 m3u8。
                     </p>
                 </div>
 
@@ -1061,11 +1062,9 @@ createApp({
             const key = site.key;
             this.status[key] = { loading: true };
             try {
-                const { data } = await this.api('/api/admin/sites/test', {
-                    method: 'POST',
-                    body: JSON.stringify({ key: site._originalKey || site.key })
-                });
-                this.status[key] = { ok: Boolean(data.success), latency: data.latency || 0, message: data.message };
+                const target = site._originalKey || site.key;
+                const { data } = await this.api('/api/check?key=' + encodeURIComponent(target));
+                this.status[key] = { ok: Boolean(data.ok), latency: data.latency || 0, message: data.message, status: data.status };
             } catch (e) { this.status[key] = { ok: false }; }
         },
         async testAll() {

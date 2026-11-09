@@ -41,7 +41,7 @@
             <h1>冬瓜TV 部署与使用教程</h1>
             <p>从零开始部署，到后台添加采集站、开启网盘搜索，一步一步来。</p>
             <div class="hero-tags">
-                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>Cloudflare / Nginx / 宝塔</span><span>TMDb 服务端代理</span><span>Android 原生客户端</span><span>播放代理与自动切源</span><span>健康巡检</span>
+                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>Cloudflare / Nginx / 宝塔</span><span>TMDb 服务端代理</span><span>Android 原生客户端</span><span>播放代理与手动切源</span><span>PING 巡检</span>
             </div>
             <div class="note">
                 本页只是静态教程，不运行任何后端。仓库和正式版本里<strong>不包含任何采集站地址</strong>，
@@ -313,16 +313,16 @@ https://example.com/inc/apijson.php</code></pre>
                 <strong>不要把自己的 db.json 上传到 GitHub</strong>，也不要截图公开接口地址。
             </div>
 
-            <h3>6. 播放代理与自动切源</h3>
+            <h3>6. 播放代理与手动切源</h3>
             <p>前台播放时，浏览器请求的是本站的 <code>/api/play/proxy</code>。服务器会补上源站需要的 Referer 和 UA，
             再改写 m3u8 里的分片、密钥和子列表地址，解决大部分 403、CORS 和跨域分片问题。</p>
-            <p>当前线路播放失败时，播放器会自动尝试同一影片的下一条线路，最多 3 次。代理只允许公网 http/https，
+            <p>当前线路播放失败时，播放器只提示手动切换，不再自动尝试其他线路。每条线路是否可用受源站接口、播放格式和 m3u8 是否存在影响。代理只允许公网 http/https，
             内网、本机和云厂商元数据地址会被拒绝。</p>
 
-            <h3>7. 搜索聚合与健康巡检</h3>
+            <h3>7. 搜索聚合与 PING 巡检</h3>
             <p>同一个片名和年份会合并成一张卡片，显示「X 站 / Y 条线路」，点进去再选站点。
-            服务每 10 分钟检查一次启用的采集站；连续失败 3 次先冷却 5 分钟，之后自动重新参与搜索，不会永久关闭。</p>
-            <p>后台「采集站管理」能看到延迟、成功率和冷却剩余时间，也可以点「自动巡检」立即检查。</p>
+            服务每 10 分钟对启用的采集站做一次 HTTP PING，只看是否能连通和延迟；连续失败 3 次先冷却 5 分钟，之后自动重新参与搜索，不会永久关闭。</p>
+            <p>后台「采集站管理」能看到延迟、成功率和冷却剩余时间，也可以点「PING 巡检」立即检查；PING 正常不代表接口一定返回 m3u8。</p>
 
             <h3>8. 观看记录和收藏</h3>
             <p>浏览记录、收藏和继续观看保存在浏览器本地，不上传服务器，也不需要注册账号。
@@ -346,7 +346,7 @@ cp examples/adapters/generic-json.js data/adapters/
                 适配器接口说明见仓库 <code>examples/adapters/README.md</code>。
             </p>
             <div class="warn">
-                适配器会在服务器上执行代码，只安装你信任的来源。安装后可以正常参与搜索、详情、健康巡检和播放代理。
+                适配器会在服务器上执行代码，只安装你信任的来源。安装后可以正常参与搜索、详情、PING 巡检和播放代理。
             </div>
         </section>
 
@@ -601,7 +601,7 @@ GET  /api/detail?site_key=站点key&amp;id=影片ID
 GET  /api/play/proxy?url=播放地址&amp;site=站点key
 GET  /api/status                     # 公开状态页数据，不含站点地址
 GET  /api/hot                        # 最近 24 小时更新
-GET  /api/check?key=站点key           # 站点测速
+GET  /api/check?key=站点key           # 站点 PING 测速
 GET  /api/app/download               # 下载已生成的 Android APK
 GET  /api/app/icon                   # 客户端图标
 
@@ -686,11 +686,11 @@ DELETE /api/admin/client/icon</code></pre>
             </details>
             <details>
                 <summary>某条线路播放失败怎么办？</summary>
-                <p>播放器会自动换下一条线路，最多 3 次。全部失败通常是源站改了播放地址或加了验证，换一个搜索结果即可。</p>
+                <p>播放器不再自动切源，只提示手动切换其他线路。很多源本身不提供 m3u8，或者只返回 mp4/需要额外解析；换一条线路或换一个搜索结果即可。</p>
             </details>
             <details>
                 <summary>后台显示站点冷却中，是坏了吗？</summary>
-                <p>不是永久禁用。连续失败 3 次后会冷却 5 分钟，结束后自动重新参与搜索。可以在后台点「自动巡检」立即重试。</p>
+                <p>不是永久禁用。PING 连续失败 3 次后会冷却 5 分钟，结束后自动重新参与搜索。可以在后台点「PING 巡检」立即重试。</p>
             </details>
         </section>
 

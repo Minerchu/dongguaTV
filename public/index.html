@@ -472,7 +472,7 @@
                 <div class="controls-area">
                     <!-- 线路选择 -->
                     <div class="mb-4">
-                        <div class="panel-title">切换线路 (真实测速)</div>
+                        <div class="panel-title">切换线路（PING 延迟）</div>
                         <div class="source-list">
                             <div v-for="source in currentGroup.sources" class="source-pill"
                                 :class="{ active: currentSource?.site_key === source.site_key }"
@@ -947,7 +947,7 @@
                     androidApp: null,
                     watchHistory: [], favorites: [], currentEpisode: null, currentEpisodeIndex: -1,
                     currentProgress: 0, currentDuration: 0, playerNotice: '',
-                    failedSources: [], playFailoverCount: 0, pendingResume: null, pendingSeek: 0,
+                    pendingResume: null, pendingSeek: 0,
                     suppressPlayerErrorUntil: 0, lastHistorySave: 0, noticeTimer: null
                 }
             },
@@ -1886,8 +1886,6 @@
                     this.currentGroup = group;
                     this.showDetail = true;
                     this.pendingResume = resume || null;
-                    this.failedSources = [];
-                    this.playFailoverCount = 0;
                     this.currentGroup.sources.forEach(source => {
                         if (!Number.isFinite(Number(source.latency)) || Number(source.latency) <= 0) source.latency = 999;
                         fetch(`/api/check?key=${source.site_key}`)
@@ -1895,7 +1893,7 @@
                             .then(data => { if (data.ok) source.latency = data.latency; });
                     });
                     const best = (resume && group.sources.find(source => source.site_key === resume.site_key)) || group.sources[0];
-                    this.switchSource(best, { auto: true, resume });
+                    this.switchSource(best, { resume });
                     if (updateRoute !== false) {
                         setAppRoute(this.watchRoute(group, best, resume && resume.episodeIndex, resume && resume.progress));
                     }
@@ -1909,10 +1907,6 @@
                 },
                 async switchSource(source, options = {}) {
                     if (!source) return;
-                    if (!options.auto) {
-                        this.failedSources = [];
-                        this.playFailoverCount = 0;
-                    }
                     this.currentSource = source;
                     this.loadingDetail = true;
                     this.episodeList = [];
@@ -1959,8 +1953,7 @@
                     const requested = Math.max(0, Number(resume && resume.episodeIndex) || 0);
                     const index = Math.min(requested, episodes.length - 1);
                     this.play(episodes[index].url, episodes[index], index, {
-                        progress: resume && resume.progress,
-                        auto: true
+                        progress: resume && resume.progress
                     });
                 },
                 proxyUrl(url) {
@@ -1969,6 +1962,51 @@
                     let proxy = '/api/play/proxy?url=' + encodeURIComponent(value);
                     if (this.currentSource && this.currentSource.site_key) proxy += '&site=' + encodeURIComponent(this.currentSource.site_key);
                     return proxy;
+                },
+                isHlsUrl(url) {
+                    return /(?:^|[\/?&=._-])m3u8(?:[\/?#&_.=-]|$)/i.test(String(url || ''));
+                },
+                destroyHls(player) {
+                    if (!player) return;
+                    const videoEl = player.video;
+                    if (videoEl && videoEl.__dgHls) {
+                        try { videoEl.__dgHls.destroy(); } catch (e) { }
+                        videoEl.__dgHls = null;
+                    }
+                    if (player.plugins && player.plugins.hls) {
+                        try { player.plugins.hls.destroy(); } catch (e) { }
+                        delete player.plugins.hls;
+                    }
+                },
+                attachHls(videoEl, player) {
+                    const url = videoEl.__dgHlsUrl || videoEl.src;
+                    this.destroyHls(player);
+                    videoEl.removeAttribute('src');
+                    videoEl.load();
+                    if (window.Hls && window.Hls.isSupported()) {
+                        const hls = new window.Hls({
+                            enableWorker: true,
+                            lowLatencyMode: false,
+                            backBufferLength: 30
+                        });
+                        videoEl.__dgHls = hls;
+                        if (player.plugins) player.plugins.hls = hls;
+                        hls.on(window.Hls.Events.ERROR, (event, data) => {
+                            if (!data || !data.fatal) return;
+                            if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
+                                try { hls.recoverMediaError(); return; } catch (e) { }
+                            }
+                            this.notifyPlayer('HLS 播放失败，请手动选择其他线路');
+                        });
+                        hls.loadSource(url);
+                        hls.attachMedia(videoEl);
+                        return;
+                    }
+                    if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+                        videoEl.src = url;
+                        return;
+                    }
+                    this.notifyPlayer('当前浏览器不支持 HLS 播放');
                 },
                 bindPlayerEvents() {
                     if (!dp || dp.__dgEventsBound) return;
@@ -1987,19 +2025,18 @@
                 },
                 play(url, episode, index, options = {}) {
                     if (!url) return;
-                    if (!options.auto) {
-                        this.failedSources = [];
-                        this.playFailoverCount = 0;
-                    }
                     this.currentUrl = url;
                     this.currentEpisode = episode || { name: '正片', url };
                     this.currentEpisodeIndex = Number.isInteger(index) ? index : 0;
                     this.pendingSeek = Math.max(0, Number(options.progress) || 0);
                     this.currentProgress = this.pendingSeek;
                     this.currentDuration = 0;
-                    const isHls = /\.m3u8(?:$|\?)/i.test(url) || /\/m3u8\//i.test(url);
+                    const isHls = this.isHlsUrl(url);
                     const proxied = this.proxyUrl(url);
-                    const video = { url: proxied, type: isHls ? 'hls' : 'normal' };
+                    const customType = {
+                        hls: (videoEl, player) => this.attachHls(videoEl, player)
+                    };
+                    const video = { url: proxied, type: isHls ? 'hls' : 'normal', customType };
                     this.suppressPlayerErrorUntil = Date.now() + 1500;
                     if (!dp) {
                         dp = new DPlayer({
@@ -2008,6 +2045,8 @@
                             video
                         });
                     } else {
+                        this.destroyHls(dp);
+                        dp.video.__dgHlsUrl = proxied;
                         dp.switchVideo(video);
                     }
                     this.bindPlayerEvents();
@@ -2051,28 +2090,7 @@
                 handlePlaybackError() {
                     if (!this.currentGroup || !this.currentSource) return;
                     if (Date.now() < this.suppressPlayerErrorUntil) return;
-                    if (!this.failedSources.includes(this.currentSource.site_key)) this.failedSources.push(this.currentSource.site_key);
-                    if (this.playFailoverCount >= 3) {
-                        this.notifyPlayer('连续切换 3 条线路仍无法播放，请手动选择其他结果');
-                        return;
-                    }
-                    const next = this.currentGroup.sources.find(source => !this.failedSources.includes(source.site_key));
-                    if (!next) {
-                        this.notifyPlayer('当前结果的所有线路都播放失败，请换一个搜索结果');
-                        return;
-                    }
-                    this.playFailoverCount++;
-                    this.notifyPlayer('当前线路播放失败，正在切换到「' + (next.site_name || next.site_key) + '」');
-                    this.suppressPlayerErrorUntil = Date.now() + 1800;
-                    this.switchSource(next, {
-                        auto: true,
-                        resume: {
-                            site_key: next.site_key,
-                            vod_id: next.vod_id,
-                            episodeIndex: Math.max(0, this.currentEpisodeIndex),
-                            progress: Math.max(0, this.currentProgress)
-                        }
-                    });
+                    this.notifyPlayer('当前线路播放失败，请手动选择其他线路');
                 },
                 
                 // 热榜左右滚动功能
