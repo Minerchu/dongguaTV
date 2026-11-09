@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
+    <title>冬瓜TV 播放器</title>
+    <link rel="icon" href="/assets/favicon.png" type="image/png">
+    <link rel="stylesheet" href="/vendor/yzmplayer/css/yzmplayer.css">
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+        }
+
+        #player {
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        #player #loading-box,
+        #player .yzmplayer-cplayer {
+            display: none !important;
+        }
+
+        #player .yzmplayer-video-wrap,
+        #player .yzmplayer-video {
+            width: 100%;
+            height: 100%;
+        }
+
+        #player .yzmplayer-controller {
+            padding-left: 14px;
+            padding-right: 14px;
+        }
+
+        #player .icon-xj,
+        #player .yzmplayer-icons.yzmplayer-comment-box {
+            display: none !important;
+        }
+
+        #player-error {
+            position: absolute;
+            inset: 0;
+            z-index: 20;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            color: #fff;
+            background: radial-gradient(circle at center, rgba(35, 35, 35, .9), #050505 70%);
+            font: 14px/1.7 "PingFang SC", "Microsoft YaHei", sans-serif;
+            text-align: center;
+        }
+
+        #player-error.show {
+            display: flex;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="player"></div>
+    <div id="player-error"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.1.5/hls.min.js"
+        integrity="sha512-O83G0C/Ypje2c3LTYElrDXQaqtKKxtu8WKlMLEMoIFs9HDeI4rMlpnn9AX5xvR3PgJpwSEBrZpxSzfE1usZqiQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="/vendor/yzmplayer/js/yzmplayer.js"></script>
+    <script>
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            const source = String(params.get('url') || '').trim();
+            const title = String(params.get('name') || '冬瓜TV').trim();
+            const poster = String(params.get('pic') || '').trim();
+            const startAt = Math.max(0, Number(params.get('t')) || 0);
+            const errorBox = document.getElementById('player-error');
+            let player = null;
+            let lastErrorAt = 0;
+            let lastProgressAt = 0;
+
+            document.title = title + ' - 冬瓜TV';
+
+            function post(message) {
+                if (window.parent === window) return;
+                window.parent.postMessage(Object.assign({ source: 'donggua-player' }, message), window.location.origin);
+            }
+
+            function showError(message) {
+                const now = Date.now();
+                if (now - lastErrorAt < 1500) return;
+                lastErrorAt = now;
+                errorBox.textContent = message || '视频加载失败，请切换其他线路';
+                errorBox.classList.add('show');
+                post({ type: 'error', message: errorBox.textContent });
+            }
+
+            if (!/^https?:\/\//i.test(source)) {
+                showError('缺少有效的播放地址');
+                return;
+            }
+
+            const NativeHls = window.Hls;
+            if (NativeHls && !NativeHls.__dgWrapped) {
+                function DGWrappedHls(config) {
+                    const instance = new NativeHls(config);
+                    instance.on(NativeHls.Events.ERROR, (event, data) => {
+                        if (!data || !data.fatal) return;
+                        if (data.type === NativeHls.ErrorTypes.MEDIA_ERROR) {
+                            try { instance.recoverMediaError(); return; } catch (e) { }
+                        }
+                        showError('视频无法直连播放：源站限制了浏览器跨域（m3u8 就是 HLS），请切换其他线路');
+                    });
+                    return instance;
+                }
+                Object.keys(NativeHls).forEach(key => {
+                    try { DGWrappedHls[key] = NativeHls[key]; } catch (e) { }
+                });
+                DGWrappedHls.isSupported = NativeHls.isSupported.bind(NativeHls);
+                DGWrappedHls.prototype = NativeHls.prototype;
+                DGWrappedHls.__dgWrapped = true;
+                window.Hls = DGWrappedHls;
+            }
+
+            try {
+                if (typeof window.yzmplayer !== 'function') {
+                    throw new Error('播放器资源加载失败');
+                }
+                player = new window.yzmplayer({
+                    element: document.getElementById('player'),
+                    theme: '#e50914',
+                    autoplay: true,
+                    hotkey: true,
+                    preload: 'auto',
+                    volume: 0.7,
+                    video: { url: source, type: 'auto', pic: poster }
+                });
+                const loading = document.querySelector('#player #loading-box');
+                if (loading) loading.remove();
+
+                player.on('loadedmetadata', () => {
+                    const duration = Number(player.video.duration) || 0;
+                    if (startAt > 2 && duration > startAt + 2) player.seek(startAt);
+                    post({ type: 'ready', duration });
+                });
+                player.on('timeupdate', () => {
+                    const now = Date.now();
+                    if (now - lastProgressAt < 1000) return;
+                    lastProgressAt = now;
+                    post({
+                        type: 'progress',
+                        currentTime: Number(player.video.currentTime) || 0,
+                        duration: Number(player.video.duration) || 0
+                    });
+                });
+                player.on('ended', () => {
+                    post({ type: 'ended', duration: Number(player.video.duration) || 0 });
+                });
+                player.on('error', () => {
+                    showError('视频加载失败：播放链接可能已失效，请切换其他线路');
+                });
+                player.play();
+            } catch (error) {
+                showError(error && error.message ? error.message : '播放器启动失败');
+            }
+
+            window.addEventListener('message', event => {
+                if (event.source !== window.parent || !player) return;
+                const message = event.data || {};
+                if (message.type !== 'command') return;
+                if (message.command === 'pause') player.pause();
+                if (message.command === 'play') player.play();
+                if (message.command === 'seek') player.seek(Math.max(0, Number(message.time) || 0));
+            });
+        })();
+    </script>
+</body>
+
+</html>

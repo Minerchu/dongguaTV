@@ -28,9 +28,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.1.5/hls.min.js"
         integrity="sha512-O83G0C/Ypje2c3LTYElrDXQaqtKKxtu8WKlMLEMoIFs9HDeI4rMlpnn9AX5xvR3PgJpwSEBrZpxSzfE1usZqiQ=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dplayer/1.26.0/DPlayer.min.js"
-        integrity="sha512-1t2U1/0xGhBZAriD+/9llOhjPs5nFBDZ7KbnHB4SGwAUPrzyS+02Kus1cz0exk5eMyXxwfHxj/1JLuie/p6xXA=="
-        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.2.47/vue.global.prod.min.js"
         integrity="sha512-Wn/yBJ4RQtrSFtq1z61/DM40a7VGN8wnyg8oVhWSZAZchTO9zS/l8Kw6bk32CYjS5VgProK4ujLRMqxEE/bUPQ=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -464,7 +461,8 @@
 
                 <!-- 2. 中部：超大播放器 -->
                 <div class="player-box">
-                    <div id="dplayer" style="width: 100%; height: 100%;"></div>
+                    <iframe ref="playerFrame" class="stream-player" title="冬瓜TV 播放器"
+                        allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
                     <div v-if="playerNotice" class="player-notice">{{ playerNotice }}</div>
                 </div>
 
@@ -782,8 +780,6 @@
             window.history[replace ? 'replaceState' : 'pushState']({ app: true }, '', target);
         }
 
-        let dp = null;
-
         // 添加触摸滑动支持函数
         function initHotRowSwipe() {
             const hotRows = document.querySelectorAll('.hot-row');
@@ -948,12 +944,15 @@
                     watchHistory: [], favorites: [], currentEpisode: null, currentEpisodeIndex: -1,
                     currentProgress: 0, currentDuration: 0, playerNotice: '',
                     pendingResume: null, pendingSeek: 0,
-                    suppressPlayerErrorUntil: 0, lastHistorySave: 0, noticeTimer: null
+                    suppressPlayerErrorUntil: 0, lastHistorySave: 0, noticeTimer: null,
+                    playerMessageHandler: null
                 }
             },
             mounted() {
                 window.addEventListener('scroll', () => { this.scrollY = window.scrollY; });
                 window.addEventListener('popstate', () => this.applyRoute());
+                this.playerMessageHandler = event => this.onPlayerMessage(event);
+                window.addEventListener('message', this.playerMessageHandler);
                 document.addEventListener('slid.bs.carousel', this.handleHeroSlide);
                 window.addEventListener('keydown', (e) => {
                     if (e.key !== 'Escape') return;
@@ -976,6 +975,7 @@
             },
             beforeUnmount() {
                 document.removeEventListener('slid.bs.carousel', this.handleHeroSlide);
+                if (this.playerMessageHandler) window.removeEventListener('message', this.playerMessageHandler);
             },
             computed: {
                 groupedList() {
@@ -1430,7 +1430,11 @@
                     this.$nextTick(() => this.openDetail(group));
                 },
                 castVideo() {
-                    const videoEl = document.querySelector('.dplayer-video');
+                    const frame = this.$refs.playerFrame;
+                    let videoEl = null;
+                    try {
+                        videoEl = frame && frame.contentDocument && frame.contentDocument.querySelector('.yzmplayer-video');
+                    } catch (e) { }
                     if (!videoEl) return alert('请先播放视频');
                     if (videoEl.remote && videoEl.remote.state !== 'disconnected') videoEl.remote.prompt().catch(() => { });
                     else if (videoEl.webkitShowPlaybackTargetPicker) videoEl.webkitShowPlaybackTargetPicker();
@@ -1899,10 +1903,10 @@
                     }
                 },
                 closeDetail(updateRoute = true) {
-                    if (dp && dp.video) this.recordHistory(dp.video.currentTime, dp.video.duration);
+                    this.recordHistory(this.currentProgress, this.currentDuration);
                     this.showDetail = false;
                     this.playerNotice = '';
-                    if (dp) dp.pause();
+                    this.postPlayerCommand('pause');
                     if (updateRoute !== false) setAppRoute(this.searchRoute());
                 },
                 async switchSource(source, options = {}) {
@@ -1956,64 +1960,31 @@
                         progress: resume && resume.progress
                     });
                 },
-                isHlsUrl(url) {
-                    return /(?:^|[\/?&=._-])m3u8(?:[\/?#&_.=-]|$)/i.test(String(url || ''));
+                playerPageUrl(url, startAt) {
+                    const params = new URLSearchParams({
+                        url,
+                        name: (this.currentGroup && this.currentGroup.name) || '影片',
+                        pic: (this.currentGroup && this.currentGroup.pic) || ''
+                    });
+                    if (Number(startAt) > 2) params.set('t', String(Math.floor(Number(startAt))));
+                    return '/player/?' + params.toString();
                 },
-                destroyHls(player) {
-                    if (!player) return;
-                    const videoEl = player.video;
-                    if (videoEl && videoEl.__dgHls) {
-                        try { videoEl.__dgHls.destroy(); } catch (e) { }
-                        videoEl.__dgHls = null;
-                    }
-                    if (player.plugins && player.plugins.hls) {
-                        try { player.plugins.hls.destroy(); } catch (e) { }
-                        delete player.plugins.hls;
-                    }
+                postPlayerCommand(command, time) {
+                    const frame = this.$refs.playerFrame;
+                    if (!frame || !frame.contentWindow) return;
+                    frame.contentWindow.postMessage({ type: 'command', command, time }, window.location.origin);
                 },
-                attachHls(videoEl, player) {
-                    const url = videoEl.__dgHlsUrl || videoEl.src;
-                    this.destroyHls(player);
-                    videoEl.removeAttribute('src');
-                    videoEl.load();
-                    if (window.Hls && window.Hls.isSupported()) {
-                        const hls = new window.Hls({
-                            enableWorker: true,
-                            lowLatencyMode: false,
-                            backBufferLength: 30
-                        });
-                        videoEl.__dgHls = hls;
-                        if (player.plugins) player.plugins.hls = hls;
-                        hls.on(window.Hls.Events.ERROR, (event, data) => {
-                            if (!data || !data.fatal) return;
-                            if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
-                                try { hls.recoverMediaError(); return; } catch (e) { }
-                            }
-                            this.notifyPlayer('HLS 播放失败，源站可能限制跨域或线路已失效，请切换其他线路');
-                        });
-                        hls.loadSource(url);
-                        hls.attachMedia(videoEl);
-                        return;
-                    }
-                    if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
-                        videoEl.src = url;
-                        return;
-                    }
-                    this.notifyPlayer('当前浏览器不支持 HLS 播放');
-                },
-                bindPlayerEvents() {
-                    if (!dp || dp.__dgEventsBound) return;
-                    dp.__dgEventsBound = true;
-                    const fail = () => this.handlePlaybackError();
-                    if (typeof dp.on === 'function') {
-                        dp.on('error', fail);
-                        dp.on('timeupdate', () => this.onPlayerProgress());
-                        dp.on('ended', () => this.onPlayerEnded());
-                    }
-                    if (dp.video) {
-                        dp.video.addEventListener('error', fail);
-                        dp.video.addEventListener('timeupdate', () => this.onPlayerProgress());
-                        dp.video.addEventListener('ended', () => this.onPlayerEnded());
+                onPlayerMessage(event) {
+                    const frame = this.$refs.playerFrame;
+                    if (!frame || event.source !== frame.contentWindow) return;
+                    const data = event.data || {};
+                    if (data.source !== 'donggua-player') return;
+                    if (data.type === 'progress') {
+                        this.onPlayerProgress(data.currentTime, data.duration);
+                    } else if (data.type === 'ended') {
+                        this.onPlayerEnded(data.duration);
+                    } else if (data.type === 'error') {
+                        this.handlePlaybackError(data.message);
                     }
                 },
                 play(url, episode, index, options = {}) {
@@ -2021,48 +1992,21 @@
                     this.currentUrl = url;
                     this.currentEpisode = episode || { name: '正片', url };
                     this.currentEpisodeIndex = Number.isInteger(index) ? index : 0;
-                    this.pendingSeek = Math.max(0, Number(options.progress) || 0);
-                    this.currentProgress = this.pendingSeek;
+                    const startAt = Math.max(0, Number(options.progress) || 0);
+                    this.pendingSeek = startAt;
+                    this.currentProgress = startAt;
                     this.currentDuration = 0;
-                    const isHls = this.isHlsUrl(url);
-                    const customType = {
-                        hls: (videoEl, player) => this.attachHls(videoEl, player)
-                    };
-                    const video = { url, type: isHls ? 'hls' : 'normal', customType };
-                    this.suppressPlayerErrorUntil = Date.now() + 1500;
-                    if (!dp) {
-                        dp = new DPlayer({
-                            container: document.getElementById('dplayer'),
-                            theme: '#e50914',
-                            video
-                        });
-                    } else {
-                        this.destroyHls(dp);
-                        dp.video.__dgHlsUrl = url;
-                        dp.switchVideo(video);
-                    }
-                    this.bindPlayerEvents();
-                    try { dp.play(); } catch (e) { }
-                    if (this.pendingSeek > 4) {
-                        const seek = () => {
-                            try {
-                                if (dp && dp.video && dp.video.readyState >= 1 && this.pendingSeek > 0) {
-                                    dp.video.currentTime = this.pendingSeek;
-                                    this.pendingSeek = 0;
-                                }
-                            } catch (e) { }
-                        };
-                        setTimeout(seek, 700);
-                        setTimeout(seek, 1900);
-                    }
+                    const frame = this.$refs.playerFrame;
+                    if (!frame) return;
+                    this.suppressPlayerErrorUntil = Date.now() + 1800;
+                    frame.src = this.playerPageUrl(url, startAt);
                     if (this.showDetail && this.currentGroup && this.currentSource) {
-                        setAppRoute(this.watchRoute(this.currentGroup, this.currentSource, this.currentEpisodeIndex, this.pendingSeek), true);
+                        setAppRoute(this.watchRoute(this.currentGroup, this.currentSource, this.currentEpisodeIndex, startAt), true);
                     }
                 },
-                onPlayerProgress() {
-                    if (!dp || !dp.video) return;
-                    const position = Number(dp.video.currentTime) || 0;
-                    const duration = Number(dp.video.duration) || 0;
+                onPlayerProgress(position, duration) {
+                    position = Math.max(0, Number(position) || 0);
+                    duration = Math.max(0, Number(duration) || 0);
                     this.currentProgress = position;
                     this.currentDuration = duration;
                     if (position > 3 && Date.now() - this.lastHistorySave > 4000) {
@@ -2070,19 +2014,19 @@
                         this.recordHistory(position, duration);
                     }
                 },
-                onPlayerEnded() {
-                    if (!dp || !dp.video) return;
-                    this.recordHistory(dp.video.duration || 0, dp.video.duration || 0);
+                onPlayerEnded(duration) {
+                    duration = Math.max(0, Number(duration) || this.currentDuration || 0);
+                    this.recordHistory(duration, duration);
                 },
                 notifyPlayer(message) {
                     this.playerNotice = String(message || '');
                     if (this.noticeTimer) clearTimeout(this.noticeTimer);
                     this.noticeTimer = setTimeout(() => { this.playerNotice = ''; }, 4200);
                 },
-                handlePlaybackError() {
+                handlePlaybackError(message) {
                     if (!this.currentGroup || !this.currentSource) return;
                     if (Date.now() < this.suppressPlayerErrorUntil) return;
-                    this.notifyPlayer('当前线路播放失败，请手动选择其他线路');
+                    this.notifyPlayer(message || '当前线路播放失败，请手动选择其他线路');
                 },
                 
                 // 热榜左右滚动功能

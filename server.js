@@ -1420,6 +1420,10 @@ app.get('/status', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'status.html'));
 });
 
+app.get(['/player', '/player/'], (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'player.html'));
+});
+
 if (require.main === module) {
     resetInterruptedBuild();
     startBackgroundJobs();
