@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { buildApk, isAvailable: isApkBuilderAvailable } = require('./apk-builder');
+const tvbox = require('./tvbox');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -272,6 +273,15 @@ function normalizeApi(raw) {
     u = u.split('#')[0].split('?')[0].replace(/\/+$/, '');
     if (!/\.php$/i.test(u) && !/provide\/vod/i.test(u)) u += '/api.php/provide/vod';
     return u;
+}
+function comparableApi(raw) {
+    const tvboxApi = tvbox.normalizeTvboxApi(raw);
+    if (tvboxApi) return tvboxApi;
+    try { return normalizeApi(raw); } catch (e) { return ''; }
+}
+function existingApiSet(db) {
+    const sites = db && Array.isArray(db.sites) ? db.sites : [];
+    return new Set(sites.map(site => comparableApi(site && site.api)).filter(Boolean));
 }
 function siteHost(api) {
     try { return new URL(api).hostname.replace(/^www\./, ''); } catch (e) { return 'site'; }
@@ -829,7 +839,7 @@ app.post('/api/admin/sites/import', requireAdmin, async (req, res) => {
     const text = String(req.body.text || '');
     const db = getDB();
     const taken = new Set(db.sites.map(s => s.key));
-    const existingApis = new Set(db.sites.map(s => s.api));
+    const existingApis = existingApiSet(db);
     const added = [], skipped = [], failed = [];
     const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
     for (const line of lines) {
@@ -840,13 +850,51 @@ app.post('/api/admin/sites/import', requireAdmin, async (req, res) => {
         else { apiRaw = parts[0] || line; }
         let api;
         try { api = normalizeApi(apiRaw); } catch (e) { failed.push({ line, error: e.message }); continue; }
-        if (existingApis.has(api)) { skipped.push({ line, reason: '已存在' }); continue; }
+        const comparable = comparableApi(api);
+        if (existingApis.has(comparable)) { skipped.push({ line, reason: '已存在' }); continue; }
         if (!name) name = siteHost(api);
         db.sites.push({ key: makeKey(api, taken), name: cleanText(name, 40), api, active: true });
-        existingApis.add(api);
+        existingApis.add(comparable);
         added.push(api);
     }
     saveDB(db);
+    res.json({ success: true, added: added.length, skipped: skipped.length, failed: failed.length, details: { added, skipped, failed } });
+});
+
+app.post('/api/admin/import/preview', requireAdmin, async (req, res) => {
+    const input = String(req.body.input || req.body.text || '').slice(0, 900000);
+    const mode = req.body.mode === 'maccms' ? 'maccms' : 'tvbox';
+    if (!input.trim()) return res.status(400).json({ success: false, error: mode === 'tvbox' ? '请先粘贴 TVBox 配置地址' : '请先粘贴苹果CMS接口' });
+    try {
+        const db = getDB();
+        const options = { existingApis: Array.from(existingApiSet(db)) };
+        const result = mode === 'maccms'
+            ? tvbox.previewMaccmsInput(input, options)
+            : await tvbox.previewTvboxInput(input, options);
+        res.json({ success: true, mode, ...result });
+    } catch (e) {
+        res.status(400).json({ success: false, error: e.message || '导入源解析失败' });
+    }
+});
+
+app.post('/api/admin/import/sites', requireAdmin, (req, res) => {
+    const items = Array.isArray(req.body.sites) ? req.body.sites.slice(0, 200) : [];
+    if (!items.length) return res.status(400).json({ success: false, error: '没有选中要导入的站点' });
+    const db = getDB();
+    const taken = new Set(db.sites.map(s => s.key));
+    const existingApis = existingApiSet(db);
+    const added = [], skipped = [], failed = [];
+    for (const item of items) {
+        const raw = item && typeof item === 'object' ? item : {};
+        const api = tvbox.normalizeTvboxApi(raw.api);
+        if (!api) { failed.push({ name: cleanText(raw.name, 80), api: cleanText(raw.api, 500), error: '不是受支持的 Maccms 接口' }); continue; }
+        if (existingApis.has(api)) { skipped.push({ name: cleanText(raw.name, 80), api, reason: '已存在' }); continue; }
+        const name = cleanText(raw.name, 40) || siteHost(api);
+        db.sites.push({ key: makeKey(api, taken), name, api, active: true });
+        existingApis.add(api);
+        added.push({ name, api });
+    }
+    if (added.length) saveDB(db);
     res.json({ success: true, added: added.length, skipped: skipped.length, failed: failed.length, details: { added, skipped, failed } });
 });
 

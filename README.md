@@ -83,12 +83,17 @@ https://example.com/inc/apijson.php
 - `"inc/apijson.php"`
 - `maccms 采集接口`
 
-批量导入时每行一个：
+后台的「导入采集源」支持两种方式，解析后会先查重，再让你勾选导入：
+
+- **TVBox 配置**：每行粘贴一个配置地址。支持明文 JSON、Base64、图片尾部隐写、TVBox 2423/2324 加密，以及配置里的 `urls` 仓库。
+- **苹果CMS 接口**：每行一个接口，可以只填地址，也可以写成「名称,地址」。
 
 ```text
 资源站A,https://example.com/api.php/provide/vod
 资源站B,https://example.org/inc/apijson.php
 ```
+
+预览表里会直接标出「新接口」和「已存在」，已存在的不能重复导入。TVBox 里的 `csp_` 内置源、Jar 源需要播放器自己运行，网页后台用不了，会自动跳过并显示原因。
 
 站点配置保存在 `data/db.json`，不会提交到 Git。
 
@@ -179,6 +184,8 @@ PUT    /api/admin/sites/:key
 DELETE /api/admin/sites/:key
 POST   /api/admin/sites/test
 POST   /api/admin/sites/import
+POST   /api/admin/import/preview
+POST   /api/admin/import/sites
 PUT    /api/admin/settings
 POST   /api/admin/pansou/test
 GET    /api/admin/client

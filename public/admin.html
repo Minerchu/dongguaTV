@@ -34,6 +34,8 @@
     .sticky-tools { position:sticky; top:0; z-index:5; background:#f5f6f8; padding:.75rem 0; }
     .tag { font-size:11px; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#4338ca; }
     .site-row td { background:#fff; }
+    .source-cell { max-width:300px; overflow-wrap:anywhere; font-size:11px; color:var(--muted); }
+    .import-api { word-break:break-all; }
     .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; }
 </style>
 </head>
@@ -71,6 +73,7 @@
 
         <ul class="nav nav-pills gap-2 mb-4">
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='sites'}" @click="tab='sites'"><i class="fas fa-database me-1"></i>采集站管理</button></li>
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='import'}" @click="tab='import'"><i class="fas fa-file-import me-1"></i>导入采集源</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='cloud'}" @click="tab='cloud'"><i class="fas fa-cloud me-1"></i>网盘搜索</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='client'}" @click="openClientTab"><i class="fab fa-android me-1"></i>Android 客户端</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='guide'}" @click="tab='guide'"><i class="fas fa-circle-question me-1"></i>使用教程</button></li>
@@ -99,16 +102,14 @@
                 </div>
             </div>
 
-            <div class="card p-3 mb-3">
-                <h6 class="mb-2"><i class="fas fa-file-import text-danger me-1"></i>批量导入</h6>
-                    <p class="text-muted small mb-2">每行一个，支持「名称,地址」或直接填地址。例如：<code>示例站,https://example.com/api.php/provide/vod</code></p>
-                    <textarea class="form-control mono mb-2" rows="3" v-model="importText" placeholder="https://example.com/api.php/provide/vod&#10;https://example.org/api.php/provide/vod"></textarea>
-                <div class="d-flex gap-2 align-items-center">
-                    <button class="btn btn-outline-danger btn-sm" :disabled="importing" @click="importSites">{{ importing ? '导入中...' : '批量导入' }}</button>
-                    <span v-if="importResult" class="small" :class="importResult.failed ? 'text-warning' : 'ok'">
-                        成功 {{ importResult.added }}，跳过 {{ importResult.skipped }}，失败 {{ importResult.failed }}
-                    </span>
+            <div class="card p-3 mb-3 d-flex flex-column flex-md-row flex-wrap justify-content-between align-items-md-center gap-2">
+                <div>
+                    <h6 class="mb-1"><i class="fas fa-file-import text-danger me-1"></i>批量导入与查重</h6>
+                    <p class="text-muted small mb-0">
+                        已合并到「导入采集源」。可以直接解析 TVBox 配置，也可以按行粘贴苹果CMS接口；导入前会先标记已存在的地址。
+                    </p>
                 </div>
+                <button class="btn btn-outline-danger btn-sm" @click="tab='import'">打开导入采集源</button>
             </div>
 
             <div class="sticky-tools d-flex justify-content-between align-items-center">
@@ -172,6 +173,91 @@
                 提示：修改名称 / 地址 / 启用状态后，记得点该行的 <i class="fas fa-floppy-disk"></i> 保存。
                 API 地址只支持 <strong>Maccms V10 JSON 接口</strong>，不确定格式请先看「使用教程」。
             </p>
+        </div>
+
+        <!-- TVBox / 苹果CMS 导入 -->
+        <div v-show="tab==='import'">
+            <div class="card p-4 mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div>
+                        <h6 class="mb-1"><i class="fas fa-file-import text-danger me-1"></i>导入采集源</h6>
+                        <p class="text-muted small mb-0">先解析预览并自动查重，确认后再导入。只接受网页端可直连的 Maccms 接口。</p>
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn" :class="importMode==='tvbox' ? 'btn-danger' : 'btn-outline-secondary'" @click="switchImportMode('tvbox')">TVBox 配置</button>
+                        <button class="btn" :class="importMode==='maccms' ? 'btn-danger' : 'btn-outline-secondary'" @click="switchImportMode('maccms')">苹果CMS 接口</button>
+                    </div>
+                </div>
+
+                <template v-if="importMode==='tvbox'">
+                    <p class="small text-muted mt-3 mb-2">
+                        支持明文 JSON、Base64、图片隐写、TVBox 2423/2324 加密和 urls 仓库。配置地址每行一个。
+                        <span class="text-danger">csp_ 内置源和 Jar 源无法直接给网页使用，会自动跳过。</span>
+                    </p>
+                    <textarea class="form-control mono" rows="6" v-model="tvboxText" placeholder="https://example.com/tvbox.json&#10;https://example.org/config.json"></textarea>
+                </template>
+                <template v-else>
+                    <p class="small text-muted mt-3 mb-2">
+                        每行一个苹果CMS接口，也可以写「名称,地址」。支持 /api.php/provide/vod 和 /inc/apijson.php。
+                    </p>
+                    <textarea class="form-control mono" rows="6" v-model="maccmsText" placeholder="示例资源站,https://example.com/api.php/provide/vod&#10;https://example.org/inc/apijson.php"></textarea>
+                </template>
+
+                <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                    <button class="btn btn-danger" :disabled="importParsing" @click="previewImport">
+                        <i class="fas fa-magnifying-glass me-1"></i>{{ importParsing ? '解析中...' : '解析并查重' }}
+                    </button>
+                    <button class="btn btn-outline-secondary" :disabled="importParsing" @click="clearImport">清空</button>
+                    <span v-if="importMessage" class="small" :class="importMessage.ok ? 'ok' : 'bad'">{{ importMessage.text }}</span>
+                </div>
+            </div>
+
+            <div v-if="importCandidates.length" class="card p-3 mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div>
+                        <h6 class="mb-1">解析结果</h6>
+                        <div class="small text-muted" v-if="importMode==='tvbox' && importStats">
+                            读取 {{ importStats.configsFetched }} 个配置，发现 {{ importStats.directSites }} 个直连源，
+                            跳过 {{ importStats.skippedSites }} 个内置/无效源，去重 {{ importStats.duplicates }} 个
+                        </div>
+                        <div class="small text-muted" v-else-if="importStats">
+                            读取 {{ importStats.lines }} 行，新增 {{ importStats.newSites }}，已存在 {{ importStats.existingSites }}，
+                            跳过 {{ importStats.skippedSites }}，输入内去重 {{ importStats.duplicates }}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" @click="selectAllImport">全选未导入</button>
+                        <button class="btn btn-danger btn-sm" :disabled="importImporting || !importSelectedCount" @click="importSelected">
+                            <i class="fas fa-download me-1"></i>{{ importImporting ? '导入中...' : ('导入选中 ' + importSelectedCount) }}
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr><th style="width:44px">选择</th><th style="width:180px">名称</th><th>接口地址</th><th style="width:88px">状态</th><th style="width:230px">来源</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="item in importCandidates" :key="item.api">
+                                <td><input class="form-check-input" type="checkbox" v-model="item.selected" :disabled="item.existing"></td>
+                                <td><input class="form-control form-control-sm" v-model="item.name"></td>
+                                <td><code class="small import-api">{{ item.api }}</code></td>
+                                <td><span class="badge" :class="item.existing ? 'bg-secondary' : 'bg-success'">{{ item.existing ? '已存在' : '新接口' }}</span></td>
+                                <td class="source-cell">{{ item.sourceName || item.sourceUrl || '粘贴导入' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div v-if="importErrors.length" class="card p-3">
+                <h6 class="mb-2"><i class="fas fa-triangle-exclamation text-warning me-1"></i>未导入 / 解析失败</h6>
+                <ul class="small text-muted mb-0">
+                    <li v-for="(item, idx) in importErrors" :key="idx">
+                        <span class="mono">{{ item.url || item.line }}</span>：{{ item.error }}
+                    </li>
+                </ul>
+            </div>
         </div>
 
         <!-- 网盘搜索 -->
@@ -371,11 +457,19 @@ https://example.com/inc/apijson.php</pre>
                 </div>
 
                 <div class="step">
-                    <h6>填进后台并测试</h6>
-                    <p class="small text-muted mb-0">
-                        回到「采集站管理」，填站点名称和 API 地址，点 <strong>测试并添加</strong>。
-                        显示「连接正常」就代表添加成功，前台搜索会立刻用上。
+                    <h6>添加或批量导入</h6>
+                    <p class="small text-muted mb-2">
+                        单个接口可以在「采集站管理」填写名称和地址，点 <strong>测试并添加</strong>。
+                        手里已经有 TVBox 配置或一堆接口时，打开 <strong>「导入采集源」</strong> 更快：
                     </p>
+                    <ul class="small text-muted mb-2">
+                        <li><strong>TVBox 配置：</strong>每行粘贴一个配置地址，支持明文、Base64、图片隐写、2423/2324 加密和 urls 仓库。</li>
+                        <li><strong>苹果CMS 接口：</strong>每行一个，写成 <code>名称,https://example.com/api.php/provide/vod</code> 或只填地址。</li>
+                        <li>点 <strong>解析并查重</strong> 先看结果。已存在的接口会标灰，新接口勾选后再导入。</li>
+                    </ul>
+                    <div class="hint">
+                        TVBox 里的 <code>csp_</code> 内置源、Jar 源需要播放器自己运行，网页后台无法直接使用，导入时会自动跳过并写明原因。
+                    </div>
                 </div>
 
                 <div class="step">
@@ -426,12 +520,14 @@ createApp({
             clientSaving: false, clientMessage: null, clientTimer: null,
             status: {}, testingAll: false,
             form: { name: '', api: '' }, formResult: null, adding: false,
-            importText: '', importing: false, importResult: null,
+            importMode: 'tvbox', tvboxText: '', maccmsText: '', importParsing: false, importImporting: false,
+            importCandidates: [], importErrors: [], importStats: null, importMessage: null,
             pansouResult: null
         };
     },
     computed: {
-        activeCount() { return this.sites.filter(s => s.active).length; }
+        activeCount() { return this.sites.filter(s => s.active).length; },
+        importSelectedCount() { return this.importCandidates.filter(item => item.selected && !item.existing).length; }
     },
         mounted() { this.checkLogin(); },
     methods: {
@@ -664,15 +760,83 @@ createApp({
                 else alert(data.error || '删除失败');
             } catch (e) { alert(e.message); }
         },
-        async importSites() {
-            if (!this.importText.trim()) return alert('请先粘贴地址');
-            this.importing = true; this.importResult = null;
+        switchImportMode(mode) {
+            if (this.importMode === mode) return;
+            this.importMode = mode;
+            this.importCandidates = [];
+            this.importErrors = [];
+            this.importStats = null;
+            this.importMessage = null;
+        },
+        clearImport() {
+            if (this.importMode === 'tvbox') this.tvboxText = '';
+            else this.maccmsText = '';
+            this.importCandidates = [];
+            this.importErrors = [];
+            this.importStats = null;
+            this.importMessage = null;
+        },
+        async previewImport() {
+            const input = this.importMode === 'tvbox' ? this.tvboxText : this.maccmsText;
+            if (!input.trim()) return alert(this.importMode === 'tvbox' ? '请先粘贴 TVBox 配置地址' : '请先粘贴苹果CMS接口');
+            this.importParsing = true;
+            this.importCandidates = [];
+            this.importErrors = [];
+            this.importStats = null;
+            this.importMessage = null;
             try {
-                const { data } = await this.api('/api/admin/sites/import', { method: 'POST', body: JSON.stringify({ text: this.importText }) });
-                if (data.success) { this.importResult = data; this.importText = ''; await this.loadSites(); }
-                else alert(data.error || '导入失败');
-            } catch (e) { alert(e.message); }
-            this.importing = false;
+                const { data } = await this.api('/api/admin/import/preview', {
+                    method: 'POST',
+                    body: JSON.stringify({ mode: this.importMode, input })
+                });
+                if (data.success) {
+                    this.importCandidates = (data.candidates || []).map(item => Object.assign({}, item, { selected: item.existing ? false : item.selected !== false }));
+                    this.importErrors = data.errors || [];
+                    this.importStats = data.stats || null;
+                    const count = this.importCandidates.length;
+                    const fresh = this.importCandidates.filter(item => !item.existing).length;
+                    this.importMessage = count
+                        ? { ok: true, text: '解析到 ' + count + ' 个接口，其中新增 ' + fresh + ' 个，已存在 ' + (count - fresh) + ' 个' }
+                        : { ok: false, text: '没有找到可用的 Maccms 直连接口，csp_ 内置源无法直接导入' };
+                } else {
+                    this.importMessage = { ok: false, text: data.error || '解析失败' };
+                }
+            } catch (e) {
+                this.importMessage = { ok: false, text: e.message || '解析失败' };
+            }
+            this.importParsing = false;
+        },
+        selectAllImport() {
+            this.importCandidates.forEach(item => { if (!item.existing) item.selected = true; });
+        },
+        async importSelected() {
+            const selected = this.importCandidates.filter(item => item.selected && !item.existing);
+            if (!selected.length) return alert('请先选择要导入的接口');
+            this.importImporting = true;
+            this.importMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/import/sites', {
+                    method: 'POST',
+                    body: JSON.stringify({ sites: selected.map(item => ({ name: item.name, api: item.api })) })
+                });
+                if (data.success) {
+                    const added = data.details && Array.isArray(data.details.added) ? data.details.added : [];
+                    const addedApis = new Set(added.map(item => item.api));
+                    this.importCandidates.forEach(item => {
+                        if (addedApis.has(item.api)) { item.existing = true; item.selected = false; }
+                    });
+                    const parts = ['已导入 ' + data.added + ' 个'];
+                    if (data.skipped) parts.push('跳过 ' + data.skipped + ' 个已存在');
+                    if (data.failed) parts.push('失败 ' + data.failed + ' 个');
+                    this.importMessage = { ok: true, text: parts.join('，') };
+                    await this.loadSites();
+                } else {
+                    this.importMessage = { ok: false, text: data.error || '导入失败' };
+                }
+            } catch (e) {
+                this.importMessage = { ok: false, text: e.message || '导入失败' };
+            }
+            this.importImporting = false;
         },
         exportSites() {
             const blob = new Blob([JSON.stringify({ sites: this.sites }, null, 2)], { type: 'application/json' });

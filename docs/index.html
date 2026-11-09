@@ -77,11 +77,15 @@
                     <figcaption>手机端详情：竖屏布局、海报缩略图与 Logo，先看资料再找片源</figcaption>
                 </figure>
                 <figure class="preview-card">
-                    <a href="assets/screenshots/admin-sites.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/admin-sites.jpg?v=20261109" alt="后台采集站管理" loading="lazy"></a>
-                    <figcaption>后台采集站管理：测试、添加、批量导入和启停</figcaption>
+                    <a href="assets/screenshots/admin-sites.jpg?v=20261109b" target="_blank" rel="noopener"><img src="assets/screenshots/admin-sites.jpg?v=20261109b" alt="后台采集站管理" loading="lazy"></a>
+                    <figcaption>后台采集站管理：测试、添加和启停</figcaption>
+                </figure>
+                <figure class="preview-card">
+                    <a href="assets/screenshots/admin-import.jpg?v=20261109b" target="_blank" rel="noopener"><img src="assets/screenshots/admin-import.jpg?v=20261109b" alt="后台导入 TVBox 配置和苹果CMS接口" loading="lazy"></a>
+                    <figcaption>导入采集源：TVBox 配置或苹果CMS接口，解析后自动标出已存在</figcaption>
                 </figure>
                 <figure class="preview-card wide">
-                    <a href="assets/screenshots/admin-guide.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/admin-guide.jpg?v=20261109" alt="后台使用教程" loading="lazy"></a>
+                    <a href="assets/screenshots/admin-guide.jpg?v=20261109b" target="_blank" rel="noopener"><img src="assets/screenshots/admin-guide.jpg?v=20261109b" alt="后台使用教程" loading="lazy"></a>
                     <figcaption>后台内置教程：接口格式、谷歌搜索关键词、验证和排错</figcaption>
                 </figure>
             </div>
@@ -274,10 +278,21 @@ https://example.com/inc/apijson.php</code></pre>
                 <li>打开「采集站管理」</li>
                 <li>填站点名称和接口地址</li>
                 <li>点「测试并添加」，显示「连接正常」就成功了</li>
-                <li>多个站点可以用「批量导入」，每行一个</li>
             </ol>
+
+            <h3>5. 批量导入与查重</h3>
+            <p>站点多的时候，打开左边的「导入采集源」，不用一条条手填。</p>
+            <ul>
+                <li><strong>TVBox 配置：</strong>每行粘贴一个配置地址，支持明文 JSON、Base64、图片隐写、2423/2324 加密和 urls 仓库。</li>
+                <li><strong>苹果CMS 接口：</strong>每行一个接口，可以只填地址，也可以写成「名称,地址」。</li>
+            </ul>
 <pre><code>我的资源站,https://example.com/api.php/provide/vod
 另一个站,https://example.org/inc/apijson.php</code></pre>
+            <p>点「解析并查重」后会先出预览表。已存在的地址标灰，不能再选；新接口勾选后点「导入选中」即可。</p>
+            <div class="warn">
+                TVBox 里的 <code>csp_</code> 内置源和 Jar 源要靠播放器运行，网页后台无法直接调用，导入时会自动跳过并显示原因。
+                能导入的是配置里公开的 Maccms HTTP 接口。
+            </div>
 
             <div class="warn">
                 添加后的地址只保存在服务器本地的 <code>db.json</code>（已在 <code>.gitignore</code> 中），
