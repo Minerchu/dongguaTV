@@ -1158,12 +1158,12 @@ body.tmdb-open {
 }
 
 .tmdb-sheet {
-    width: min(1120px, 100%);
+    width: min(1180px, 100%);
     margin: 0 auto;
     overflow: hidden;
-    background: #181818;
+    background: #0d0d0d;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 18px;
+    border-radius: 20px;
     box-shadow: 0 30px 100px rgba(0, 0, 0, 0.75);
     animation: tmdbSheetIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1175,18 +1175,31 @@ body.tmdb-open {
 
 .tmdb-banner {
     position: relative;
-    height: 360px;
-    background-color: #101010;
-    background-position: center 25%;
-    background-size: cover;
+    height: 500px;
+    overflow: hidden;
+    background: #0a0a0a;
+}
+
+.tmdb-banner-media {
+    position: absolute;
+    inset: 0;
+    display: block;
+}
+
+.tmdb-banner-media img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 23%;
 }
 
 .tmdb-banner-shade {
     position: absolute;
     inset: 0;
     background:
-        linear-gradient(to top, #181818 0%, rgba(24, 24, 24, 0.28) 55%, rgba(0, 0, 0, 0.2) 100%),
-        linear-gradient(to right, rgba(0, 0, 0, 0.45), transparent 55%);
+        linear-gradient(to top, #0d0d0d 0%, rgba(13, 13, 13, 0.96) 10%, rgba(13, 13, 13, 0.42) 48%, transparent 78%),
+        linear-gradient(to right, rgba(0, 0, 0, 0.72) 0%, rgba(0, 0, 0, 0.18) 48%, transparent 72%),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.62) 0%, transparent 30%);
 }
 
 .tmdb-kind {
@@ -1207,10 +1220,10 @@ body.tmdb-open {
 .tmdb-content {
     position: relative;
     display: grid;
-    grid-template-columns: 260px minmax(0, 1fr);
-    gap: 36px;
-    margin-top: -130px;
-    padding: 0 38px 44px;
+    grid-template-columns: 230px minmax(0, 1fr);
+    gap: 44px;
+    margin-top: -168px;
+    padding: 0 48px 50px;
 }
 
 .tmdb-poster-col {
@@ -1223,9 +1236,9 @@ body.tmdb-open {
     aspect-ratio: 2 / 3;
     overflow: hidden;
     background: #101010;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    box-shadow: 0 22px 50px rgba(0, 0, 0, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 14px;
+    box-shadow: 0 26px 62px rgba(0, 0, 0, 0.72);
 }
 
 .tmdb-poster img {
@@ -1246,16 +1259,28 @@ body.tmdb-open {
 
 .tmdb-info-col {
     min-width: 0;
-    padding-top: 122px;
+    padding-top: 64px;
 }
 
-.tmdb-info-col h2 {
+.tmdb-logo {
+    display: block;
+    width: auto;
+    max-width: min(480px, 64vw);
+    max-height: 132px;
+    margin: -4px 0 18px;
+    object-fit: contain;
+    object-position: left center;
+    filter: drop-shadow(0 7px 24px rgba(0, 0, 0, 0.7));
+}
+
+.tmdb-title {
     margin: 0 0 8px;
     color: #fff;
-    font-size: clamp(1.8rem, 3.5vw, 3rem);
-    font-weight: 800;
+    font-size: clamp(2rem, 3.8vw, 3.4rem);
+    font-weight: 900;
     line-height: 1.08;
     letter-spacing: -0.02em;
+    text-shadow: 0 4px 22px rgba(0, 0, 0, 0.65);
 }
 
 .tmdb-tagline {
@@ -1583,16 +1608,17 @@ body.tmdb-open {
 @media (max-width: 820px) {
     .tmdb-overlay { padding: 0 0 48px; }
     .tmdb-sheet { border-radius: 0; }
-    .tmdb-banner { height: 260px; }
+    .tmdb-banner { height: 340px; }
     .tmdb-content {
         grid-template-columns: 1fr;
-        gap: 22px;
-        margin-top: -92px;
-        padding: 0 20px 32px;
+        gap: 0;
+        margin-top: -104px;
+        padding: 0 20px 34px;
     }
-    .tmdb-poster-col { width: 138px; }
+    .tmdb-poster-col { width: 122px; margin-bottom: 20px; }
     .tmdb-info-col { padding-top: 0; }
-    .tmdb-info-col h2 { font-size: 1.9rem; }
+    .tmdb-logo { max-width: min(300px, 78vw); max-height: 92px; margin-bottom: 12px; }
+    .tmdb-title { font-size: 2rem; }
     .tmdb-overview { font-size: 14px; line-height: 1.7; }
     .tmdb-actions { margin-bottom: 22px; }
     .tmdb-block { padding: 22px 0; }
@@ -1601,10 +1627,11 @@ body.tmdb-open {
 
 @media (max-width: 480px) {
     .tmdb-kind { top: 16px; left: 18px; }
-    .tmdb-banner { height: 220px; }
-    .tmdb-content { padding: 0 15px 26px; }
-    .tmdb-poster-col { width: 118px; }
-    .tmdb-info-col h2 { font-size: 1.65rem; }
+    .tmdb-banner { height: 300px; }
+    .tmdb-content { margin-top: -88px; padding: 0 15px 28px; }
+    .tmdb-poster-col { width: 108px; margin-bottom: 16px; }
+    .tmdb-logo { max-width: min(250px, 76vw); max-height: 76px; }
+    .tmdb-title { font-size: 1.8rem; }
     .tmdb-meta { gap: 7px 12px; font-size: 12px; }
     .tmdb-action { padding: 8px 12px; font-size: 13px; }
     .tmdb-cast-card { width: 82px; flex-basis: 82px; }

@@ -450,7 +450,11 @@
             </div>
             <div v-else-if="tmdbError" class="tmdb-loading">{{ tmdbError }}</div>
             <div v-else-if="tmdbInfo" class="tmdb-sheet">
-                <div class="tmdb-banner" :style="{ backgroundImage: tmdbInfo.backdrop_path ? 'url(' + tmdbImg(tmdbInfo.backdrop_path, 'original') + ')' : 'none' }">
+                <div class="tmdb-banner">
+                    <picture v-if="tmdbInfo.backdrop_path" class="tmdb-banner-media" aria-hidden="true">
+                        <source media="(max-width: 820px)" :srcset="tmdbImg(tmdbInfo.backdrop_path, 'w780')">
+                        <img :src="tmdbImg(tmdbInfo.backdrop_path, 'w1280')" alt="">
+                    </picture>
                     <div class="tmdb-banner-shade"></div>
                     <div class="tmdb-kind">{{ tmdbType === 'tv' ? '剧集' : '电影' }} · TMDb</div>
                 </div>
@@ -462,7 +466,9 @@
                         </div>
                     </div>
                     <div class="tmdb-info-col">
-                        <h2>{{ tmdbTitleText(tmdbInfo) }}</h2>
+                        <img v-if="tmdbLogo" class="tmdb-logo" :src="tmdbLogo" :alt="tmdbTitleText(tmdbInfo)"
+                            @error="tmdbLogo = ''">
+                        <h2 v-else class="tmdb-title">{{ tmdbTitleText(tmdbInfo) }}</h2>
                         <div class="tmdb-tagline" v-if="tmdbInfo.tagline">{{ tmdbInfo.tagline }}</div>
                         <div class="tmdb-meta">
                             <span class="tmdb-score"><i class="fas fa-star"></i> {{ tmdbScoreText(tmdbInfo) }}</span>
@@ -740,7 +746,7 @@
                     hotList: [],
                     activeTab: 'video', cloudEnabled: false, cloudLoading: false,
                     cloudResults: [], cloudMessage: '', cloudError: '',
-                    tmdbOpen: false, tmdbLoading: false, tmdbError: '', tmdbInfo: null, tmdbType: 'movie',
+                    tmdbOpen: false, tmdbLoading: false, tmdbError: '', tmdbInfo: null, tmdbType: 'movie', tmdbLogo: '',
                     tmdbCast: [], tmdbCrew: [], tmdbTrailer: null, tmdbRecommendations: [],
                     tmdbProviderMap: {}, tmdbProviders: null, tmdbRegion: detectTmdbRegion(),
                     tmdbRegionOptions: TMDB_REGION_OPTIONS, tmdbRequestSeq: 0,
@@ -966,6 +972,7 @@
                     this.tmdbError = '';
                     this.tmdbInfo = null;
                     this.tmdbType = nextType;
+                    this.tmdbLogo = '';
                     this.tmdbCast = [];
                     this.tmdbCrew = [];
                     this.tmdbTrailer = null;
@@ -978,15 +985,16 @@
                     document.body.classList.add('tmdb-open');
 
                     const append = nextType === 'tv'
-                        ? 'credits,videos,watch%2Fproviders,recommendations,external_ids,content_ratings,keywords'
-                        : 'credits,videos,watch%2Fproviders,recommendations,external_ids,release_dates,keywords';
+                        ? 'credits,videos,watch%2Fproviders,recommendations,external_ids,content_ratings,keywords,images'
+                        : 'credits,videos,watch%2Fproviders,recommendations,external_ids,release_dates,keywords,images';
                     try {
-                        const res = await fetch(`${TMDB_BASE_URL}/${nextType}/${id}?language=zh-CN&append_to_response=${append}&include_video_language=zh-CN%2Cen%2Cnull`);
+                        const res = await fetch(`${TMDB_BASE_URL}/${nextType}/${id}?language=zh-CN&append_to_response=${append}&include_video_language=zh-CN%2Cen%2Cnull&include_image_language=zh,en,ja,null`);
                         if (!res.ok) throw new Error('TMDb request failed: ' + res.status);
                         const data = await res.json();
                         if (seq !== this.tmdbRequestSeq) return false;
 
                         this.tmdbInfo = data;
+                        this.tmdbLogo = this.pickTmdbLogo(data.images && data.images.logos);
                         this.tmdbCast = ((data.credits && data.credits.cast) || []).slice(0, 12);
                         this.tmdbCrew = (data.credits && data.credits.crew) || [];
                         this.tmdbAgeRating = this.tmdbCertification(data, nextType);
@@ -1123,24 +1131,19 @@
                 },
 
                 async loadHeroLogos() {
-                    const languageRank = value => value === 'zh' ? 0 : value === 'en' ? 1 : !value ? 2 : value === 'ja' ? 3 : 4;
                     await Promise.all(this.heroList.map(async (hero, index) => {
                         try {
                             const res = await fetch(`${TMDB_BASE_URL}/${hero.type}/${hero.id}/images?language=zh-CN&include_image_language=zh,en,ja,null`);
                             if (!res.ok) return;
                             const data = await res.json();
-                            const logo = (data.logos || [])
-                                .filter(item => item.file_path && (!item.iso_639_1 || ['zh', 'en', 'ja'].includes(item.iso_639_1)))
-                                .sort((a, b) => languageRank(a.iso_639_1) - languageRank(b.iso_639_1)
-                                    || Number(b.vote_average || 0) - Number(a.vote_average || 0)
-                                    || Number(b.width || 0) - Number(a.width || 0))[0];
+                            const logo = this.pickTmdbLogo(data.logos);
                             const textlessPoster = (data.posters || [])
                                 .filter(item => item.file_path && !item.iso_639_1)
                                 .sort((a, b) => Number(b.vote_average || 0) - Number(a.vote_average || 0)
                                     || Number(b.width || 0) - Number(a.width || 0))[0];
                             if (this.heroList[index] && (logo || textlessPoster)) {
                                 const artwork = {};
-                                if (logo) artwork.logo = this.heroLogoUrl(logo.file_path);
+                                if (logo) artwork.logo = logo;
                                 if (textlessPoster) artwork.poster = `${TMDB_POSTER_URL}${textlessPoster.file_path}`;
                                 this.heroList[index] = Object.assign({}, this.heroList[index], artwork);
                             }
@@ -1159,6 +1162,16 @@
                 heroLogoUrl(path) {
                     const base = /\.svg$/i.test(path) ? '/tmdb/t/p/original' : TMDB_LOGO_URL;
                     return base + path;
+                },
+
+                pickTmdbLogo(logos) {
+                    const languageRank = value => value === 'zh' ? 0 : value === 'en' ? 1 : !value ? 2 : value === 'ja' ? 3 : 4;
+                    const logo = (logos || [])
+                        .filter(item => item.file_path && (!item.iso_639_1 || ['zh', 'en', 'ja'].includes(item.iso_639_1)))
+                        .sort((a, b) => languageRank(a.iso_639_1) - languageRank(b.iso_639_1)
+                            || Number(b.vote_average || 0) - Number(a.vote_average || 0)
+                            || Number(b.width || 0) - Number(a.width || 0))[0];
+                    return logo ? this.heroLogoUrl(logo.file_path) : '';
                 },
 
                 handleHeroSlide(event) {
