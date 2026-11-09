@@ -719,14 +719,14 @@ https://example.com/inc/apijson.php</pre>
                 </div>
 
                 <div class="step">
-                    <h6>播放代理与线路切换</h6>
+                    <h6>播放直连与线路切换</h6>
                     <p class="small text-muted mb-2">
-                        前台播放会先经过本站的 <code>/api/play/proxy</code>，由服务器补上 Referer 和浏览器 UA，再重写 m3u8 分片地址。
-                        这样能解决大部分 403、CORS 和分片跨域问题。
+                        前台和安卓客户端会直接连接采集站的播放地址，视频与 m3u8 分片不经过本站服务器中转。
+                        用户和源站之间的线路越好，播放越顺畅。
                     </p>
                     <p class="small text-muted mb-0">
                         当前线路播放失败时只提示手动切换，不会自动换源。
-                        代理只允许公网 http/https 地址，内网和本机地址会被拒绝。
+                        如果提示跨域错误或 m3u8 无法加载，通常是源站限制，换其他线路即可。
                     </p>
                 </div>
 

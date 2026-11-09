@@ -193,7 +193,7 @@ class DongguaApi(private val prefs: AppPrefs) {
             year = item.optString("vod_year"),
             area = item.optString("vod_area"),
             remarks = item.optString("vod_remarks"),
-            episodes = parseEpisodes(item.optString("vod_play_url"), siteKey)
+            episodes = parseEpisodes(item.optString("vod_play_url"))
         )
     }
 
@@ -267,19 +267,7 @@ class DongguaApi(private val prefs: AppPrefs) {
         }
     }
 
-    private fun proxyPlaybackUrl(raw: String, siteKey: String): String {
-        if (raw.isBlank() || raw.contains("/api/play/proxy?")) return raw
-        val base = normalizeServerUrl(baseUrl)
-        if (base.isBlank()) return raw
-        val endpoint = (base + "/api/play/proxy").toHttpUrlOrNull() ?: return raw
-        return endpoint.newBuilder()
-            .addQueryParameter("url", raw)
-            .addQueryParameter("site", siteKey)
-            .build()
-            .toString()
-    }
-
-    private fun parseEpisodes(raw: String, siteKey: String): List<Episode> {
+    private fun parseEpisodes(raw: String): List<Episode> {
         if (raw.isBlank()) return emptyList()
         var playSource = raw
         if (raw.contains("$$$")) {
@@ -296,7 +284,7 @@ class DongguaApi(private val prefs: AppPrefs) {
             if (url.startsWith("//")) url = "https:$url"
             if (!url.startsWith("http://", true) && !url.startsWith("https://", true)) return@mapNotNull null
             if (!seen.add(url)) return@mapNotNull null
-            Episode(name = name.ifBlank { "正片" }, url = proxyPlaybackUrl(url, siteKey))
+            Episode(name = name.ifBlank { "正片" }, url = url)
         }
     }
 

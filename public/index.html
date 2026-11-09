@@ -1956,13 +1956,6 @@
                         progress: resume && resume.progress
                     });
                 },
-                proxyUrl(url) {
-                    const value = String(url || '').trim();
-                    if (!value || !/^https?:\/\//i.test(value)) return value;
-                    let proxy = '/api/play/proxy?url=' + encodeURIComponent(value);
-                    if (this.currentSource && this.currentSource.site_key) proxy += '&site=' + encodeURIComponent(this.currentSource.site_key);
-                    return proxy;
-                },
                 isHlsUrl(url) {
                     return /(?:^|[\/?&=._-])m3u8(?:[\/?#&_.=-]|$)/i.test(String(url || ''));
                 },
@@ -1996,7 +1989,7 @@
                             if (data.type === window.Hls.ErrorTypes.MEDIA_ERROR) {
                                 try { hls.recoverMediaError(); return; } catch (e) { }
                             }
-                            this.notifyPlayer('HLS 播放失败，请手动选择其他线路');
+                            this.notifyPlayer('HLS 播放失败，源站可能限制跨域或线路已失效，请切换其他线路');
                         });
                         hls.loadSource(url);
                         hls.attachMedia(videoEl);
@@ -2032,11 +2025,10 @@
                     this.currentProgress = this.pendingSeek;
                     this.currentDuration = 0;
                     const isHls = this.isHlsUrl(url);
-                    const proxied = this.proxyUrl(url);
                     const customType = {
                         hls: (videoEl, player) => this.attachHls(videoEl, player)
                     };
-                    const video = { url: proxied, type: isHls ? 'hls' : 'normal', customType };
+                    const video = { url, type: isHls ? 'hls' : 'normal', customType };
                     this.suppressPlayerErrorUntil = Date.now() + 1500;
                     if (!dp) {
                         dp = new DPlayer({
@@ -2046,7 +2038,7 @@
                         });
                     } else {
                         this.destroyHls(dp);
-                        dp.video.__dgHlsUrl = proxied;
+                        dp.video.__dgHlsUrl = url;
                         dp.switchVideo(video);
                     }
                     this.bindPlayerEvents();

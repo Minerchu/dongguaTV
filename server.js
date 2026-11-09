@@ -12,7 +12,6 @@ const { buildApk, isAvailable: isApkBuilderAvailable } = require('./apk-builder'
 const tvbox = require('./tvbox');
 const aggregate = require('./aggregate');
 const health = require('./health');
-const playback = require('./playback');
 const backup = require('./backup');
 const { createAdapterRegistry } = require('./adapters');
 const tmdb = require('./tmdb');
@@ -555,14 +554,6 @@ function searchableSites() {
     };
 }
 
-function proxyUrlFor(target, siteKey) {
-    const value = String(target || '').trim();
-    if (!value || value.startsWith('/api/play/proxy')) return value;
-    let suffix = '?url=' + encodeURIComponent(value);
-    if (siteKey) suffix += '&site=' + encodeURIComponent(siteKey);
-    return '/api/play/proxy' + suffix;
-}
-
 async function runHealthCheck(options) {
     const opts = options || {};
     const db = getDB();
@@ -858,62 +849,6 @@ app.get('/api/detail', async (req, res) => {
         res.json(response.data);
     } catch (e) {
         res.status(502).json({ error: 'Source Error' });
-    }
-});
-
-app.get('/api/play/proxy', async (req, res) => {
-    const target = cleanText(req.query.url, 4000);
-    const siteKey = cleanText(req.query.site, 60);
-    if (!target) return res.status(400).json({ error: '缺少播放地址' });
-    const site = getDB().sites.find(s => s.key === siteKey) || null;
-    try {
-        const opened = await playback.openStream(target, {
-            site,
-            method: req.method,
-            range: req.headers.range
-        });
-        const upstream = opened.response;
-        const contentType = String(upstream.headers['content-type'] || 'application/octet-stream');
-        res.status(upstream.status);
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Accept-Ranges', upstream.headers['accept-ranges'] || 'bytes');
-        if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
-        if (upstream.headers['content-range']) res.setHeader('Content-Range', upstream.headers['content-range']);
-        if (upstream.headers['last-modified']) res.setHeader('Last-Modified', upstream.headers['last-modified']);
-        if (upstream.headers.etag) res.setHeader('ETag', upstream.headers.etag);
-
-        if (upstream.status >= 400) {
-            if (upstream.data && upstream.data.destroy) upstream.data.destroy();
-            return res.end();
-        }
-
-        const playlist = req.method !== 'HEAD' && playback.isPlaylistRequest(opened.finalUrl, contentType);
-        if (playlist) {
-            const buffer = await playback.collectStream(upstream.data);
-            const text = buffer.toString('utf8');
-            res.removeHeader('Content-Length');
-            if (text.replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) {
-                const rewritten = playback.rewriteHlsPlaylist(text, opened.finalUrl, url => proxyUrlFor(url, siteKey));
-                res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-                res.setHeader('Cache-Control', 'no-cache');
-                return res.send(rewritten);
-            }
-            res.setHeader('Content-Type', contentType);
-            res.setHeader('Cache-Control', 'no-cache');
-            return res.send(buffer);
-        }
-
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'private, max-age=3600');
-        if (req.method === 'HEAD') {
-            if (upstream.data && upstream.data.destroy) upstream.data.destroy();
-            return res.end();
-        }
-        upstream.data.on('error', () => res.destroy());
-        res.on('close', () => { if (upstream.data && upstream.data.destroy) upstream.data.destroy(); });
-        upstream.data.pipe(res);
-    } catch (error) {
-        res.status(502).json({ error: String(error && error.message || '播放代理请求失败').slice(0, 200) });
     }
 });
 
