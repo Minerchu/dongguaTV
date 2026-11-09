@@ -20,8 +20,8 @@
 - Android 客户端支持扫码绑定服务器、检查更新，以及调用系统播放器或投屏应用。
 - 公开状态页 `/status`，不暴露采集站地址。
 
-- 教程：https://minerchu.github.io/dongguaTV/
-- 后台：`http://服务器IP:3000/admin.html`
+教程：https://minerchu.github.io/dongguaTV/  
+后台：`http://服务器IP:3000/admin.html`
 
 ## 界面
 
@@ -141,159 +141,31 @@ cp examples/adapters/generic-json.js data/adapters/
 
 适配器接口和完整示例见 [examples/adapters/README.md](examples/adapters/README.md)。适配器会在服务端执行，只安装你信任的代码。
 
-## 配置
+## 配置与端口
 
-| 变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `PORT` | `3000` | 容器内端口 |
-| `HOST_PORT` | `3000` | Docker 对外端口 |
-| `DOMAIN` | 空 | 启用自带 Caddy HTTPS 时填写域名 |
-| `DB_PATH` | `./db.json` | 配置文件；镜像内默认 `/app/data/db.json` |
-| `ADMIN_PASSWORD` | `admin` | 后台密码 |
-| `TMDB_API_KEY` | 空 | TMDb API Key |
-| `TMDB_API_BASE` | `https://api.themoviedb.org/3` | TMDb API 地址 |
-| `TMDB_IMAGE_BASE` | `https://image.tmdb.org/t/p` | TMDb 图片地址 |
-| `TMDB_TIMEOUT` | `15000` | TMDb 超时，毫秒 |
-| `TMDB_LANGUAGE` | `zh-CN` | TMDb 语言 |
-| `PANSOU_URL` | 空 | PanSou 地址 |
-| `PANSOU_TOKEN` | 空 | PanSou Token |
-| `PANSOU_USER` / `PANSOU_PASS` | 空 | PanSou 账号密码 |
-| `SEARCH_TIMEOUT` | `6000` | 单站搜索超时，毫秒 |
-| `TEST_TIMEOUT` | `5000` | 添加站点时的测试超时，毫秒 |
-| `PANSOU_TIMEOUT` | `15000` | 网盘搜索超时，毫秒 |
-| `HEALTH_CHECK` | `1` | 采集站自动巡检开关，`0` 关闭 |
-| `BACKUP_DIR` | `data/backups` | 自动备份目录 |
+| 变量 | 用途 |
+| --- | --- |
+| `ADMIN_PASSWORD` | 后台密码，公网部署前必须修改 |
+| `TMDB_API_KEY` | TMDb API Key，由服务端使用，不会下发到浏览器 |
+| `HOST_PORT` | Docker 对外端口，默认 `3000` |
+| `PANSOU_URL` | 使用外部 PanSou 时填写；Compose 默认使用内置实例 |
 
-后台填写的 PanSou 配置优先于环境变量。
+完整配置见 [.env.example](.env.example)。改端口只需在 `.env` 写 `HOST_PORT=8080`，再执行 `docker compose up -d`；容器内部仍是 `3000`。
 
-## 端口
+## 数据与更新
 
-只改对外端口时，编辑 `.env`：
-
-```env
-HOST_PORT=8080
-```
-
-然后执行：
-
-```bash
-docker compose up -d
-```
-
-容器内部仍使用 3000。
-
-## TMDb 接口
-
-TMDb 由本站的 `/tmdb` 服务端代理，API Key 不会下发到浏览器。服务器访问不了 TMDb 时，优先换到海外服务器，或设置 `HTTPS_PROXY`。
-
-## 数据
-
-后台「备份与恢复」可以直接下载、创建和恢复备份。也可以命令行复制：
-
-```bash
-docker cp dongguatv:/app/data/db.json ./db.json.bak
-```
-
-自动备份保存在宿主机 `data/backups/`，每天一次，保留最近 7 份。恢复前会先把当前数据库再备份一份。
-
-更新：
+后台「备份与恢复」可以下载、创建和恢复备份；自动备份在 `data/backups/`，每天一次，保留 7 份。
 
 ```bash
 git pull origin main
 docker compose up -d --build
 ```
 
-`data/db.json` 不会因重建容器丢失。旧版本如果配置在 `/app/db.json`，先迁移到宿主机的 `data/db.json`。
-
-## API
-
-公共接口：
-
-```text
-GET  /api/config
-GET  /api/sites
-GET  /api/check?key=站点key
-GET  /api/hot
-GET  /api/search?wd=关键词
-GET  /api/detail?site_key=&id=
-GET  /api/play/proxy?url=&site=
-GET  /api/status
-GET  /api/cloud/search?wd=关键词
-GET  /api/app/download
-GET  /api/app/icon
-GET  /tmdb/3/*
-GET  /tmdb/t/p/*
-```
-
-管理接口需要 `dg_admin` Cookie 或 `X-Admin-Token`：
-
-```text
-POST   /api/admin/login
-POST   /api/admin/logout
-GET    /api/admin/me
-GET    /api/admin/sites
-POST   /api/admin/sites
-PUT    /api/admin/sites/:key
-DELETE /api/admin/sites/:key
-POST   /api/admin/sites/test
-POST   /api/admin/sites/import
-POST   /api/admin/import/preview
-POST   /api/admin/import/sites
-GET    /api/admin/adapters
-POST   /api/admin/adapters/reload
-POST   /api/admin/health/check
-GET    /api/admin/health
-GET    /api/admin/backup
-GET    /api/admin/backups
-POST   /api/admin/backups
-GET    /api/admin/backups/:name
-POST   /api/admin/backups/:name/restore
-POST   /api/admin/restore
-PUT    /api/admin/settings
-POST   /api/admin/pansou/test
-GET    /api/admin/client
-GET    /api/admin/client/qr.png
-PUT    /api/admin/client
-POST   /api/admin/client/build
-POST   /api/admin/client/icon
-DELETE /api/admin/client/icon
-```
-
-登录失败在 10 分钟内超过 8 次会返回 `429`。
+`data/db.json` 不会因重建容器丢失。API 与二次开发接口见[教程](https://minerchu.github.io/dongguaTV/#api)。
 
 ## 常见问题
 
-**搜索没有结果**
-
-先在后台测试采集站。接口需要返回 JSON，网页、XML 和 404 都不能用。
-
-**某条线路播放失败**
-
-页面会自动尝试同一影片的下一条线路。如果全部失败，通常是源站改了播放地址或加了验证，换一个搜索结果即可。
-
-**后台显示某个站冷却中**
-
-这是连续失败后的临时保护，不是永久禁用。冷却结束后会自动重新参与搜索，也可以在后台点「自动巡检」立即重试。
-
-**TMDb 首页是空的**
-
-检查 `TMDB_API_KEY`。服务器访问不了 TMDb 时，配置代理或换 `TMDB_API_BASE` / `TMDB_IMAGE_BASE`。
-
-**网盘搜索不可用**
-
-检查 PanSou 是否运行，以及服务器能否访问 Telegram。Compose 默认地址是 `http://pansou:8888`。
-
-**忘记后台密码**
-
-修改 `.env` 里的 `ADMIN_PASSWORD`，然后重启容器。
-
-**APK 编译失败**
-
-执行 `docker compose logs -f dongguatv` 查看原因。服务器地址必须是手机能访问的地址，不能填 `127.0.0.1` 或容器名。
-
-**3000 端口被占用**
-
-设置 `HOST_PORT=其他端口`，再执行 `docker compose up -d`。
+搜索没结果先在后台测试站点；播放失败会自动切换下一条线路；首页没有海报多半是 TMDb Key 或服务器网络问题。更多排查见[教程 FAQ](https://minerchu.github.io/dongguaTV/#faq)。
 
 ## 安全
 
