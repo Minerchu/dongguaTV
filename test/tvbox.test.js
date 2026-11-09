@@ -57,6 +57,14 @@ test('提取 JPEG 图片尾部隐藏配置', () => {
     assert.equal(tvbox.parseTvboxJson(decoded.text).sites.length, 3);
 });
 
+test('图片尾部带随机前缀和 ** 标记也能解析', () => {
+    const encoded = Buffer.from(Buffer.from(JSON.stringify(sample), 'utf8').toString('base64'), 'utf8');
+    const marked = Buffer.concat([Buffer.from('BFkMrNQT**', 'ascii'), encoded]);
+    const image = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xd9]), marked]);
+    const decoded = tvbox.decodeTvboxBody(image);
+    assert.equal(tvbox.parseTvboxJson(decoded.text).sites.length, 3);
+});
+
 test('苹果CMS导入会查重并去掉输入内重复项', () => {
     const input = [
         '已存在,https://example.com/api.php/provide/vod',

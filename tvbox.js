@@ -140,6 +140,11 @@ function tryBase64Payload(text) {
     let candidate = String(text || '').trim();
     if (/^base64:\/\//i.test(candidate)) candidate = candidate.slice(9);
     candidate = candidate.replace(/\s+/g, '');
+    const marker = candidate.indexOf('**');
+    if (marker > 0 && marker <= 64) {
+        const tail = candidate.slice(marker + 2);
+        if (tail.length >= 24 && /^[A-Za-z0-9+/=_-]+$/.test(tail)) candidate = tail;
+    }
     if (candidate.length < 24 || !/^[A-Za-z0-9+/=_-]+$/.test(candidate)) return null;
     candidate = candidate.replace(/-/g, '+').replace(/_/g, '/');
     while (candidate.length % 4) candidate += '=';
