@@ -92,77 +92,147 @@ body {
 }
 
 /* Hero */
+#heroCarousel {
+    height: clamp(680px, 92vh, 980px);
+    background: #000;
+}
+
+#heroCarousel .carousel-inner,
 .carousel-item {
-    height: 70vh;
+    height: 100%;
     background-color: #000;
 }
 
-.hero-bg {
+.hero-media {
     position: absolute;
     inset: 0;
-    background-size: cover;
-    background-position: center top;
-    transition: transform 10s ease;
-    mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+    display: block;
+    overflow: hidden;
+}
+
+.hero-bg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 20%;
+    transform: scale(1.02);
+    transition: transform 9s ease;
 }
 
 .carousel-item.active .hero-bg {
-    transform: scale(1.05);
+    transform: scale(1.08);
 }
 
 .hero-overlay {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to top, #141414 0%, transparent 60%), linear-gradient(to right, rgba(0, 0, 0, 0.8) 0%, transparent 50%);
+    background:
+        linear-gradient(90deg, rgba(8, 8, 8, 0.96) 0%, rgba(8, 8, 8, 0.72) 32%, rgba(8, 8, 8, 0.12) 68%, transparent 100%),
+        linear-gradient(0deg, #141414 0%, rgba(20, 20, 20, 0.92) 12%, rgba(20, 20, 20, 0.2) 52%, transparent 72%),
+        linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, transparent 24%);
     display: flex;
-    align-items: center;
-    padding-left: 5%;
+    align-items: flex-end;
+    padding: 0 5% 9%;
 }
 
 .hero-content {
-    max-width: 600px;
-    margin-top: 60px;
+    max-width: 660px;
+    padding-bottom: 18px;
     animation: fadeInUp 0.8s;
 }
 
-.hero-tag {
-    background: rgba(255, 255, 255, 0.2);
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    display: inline-block;
-    margin-bottom: 15px;
-    backdrop-filter: blur(5px);
+.hero-kicker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    color: #d4d4d4;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+}
+
+.hero-rank {
+    padding: 4px 9px;
+    border-radius: 3px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 800;
+}
+
+.hero-logo {
+    display: block;
+    width: auto;
+    max-width: min(470px, 70vw);
+    max-height: 176px;
+    margin: 0 0 18px;
+    object-fit: contain;
+    object-position: left center;
+    filter: drop-shadow(0 5px 18px rgba(0, 0, 0, 0.55));
 }
 
 .hero-title {
-    font-size: 3.5rem;
+    font-size: clamp(2.8rem, 5.5vw, 5.2rem);
     font-weight: 900;
-    line-height: 1.1;
-    margin-bottom: 15px;
-    text-shadow: 2px 2px 10px rgba(0, 0, 0, 0.8);
+    line-height: 1;
+    margin: 0 0 18px;
+    text-shadow: 2px 3px 16px rgba(0, 0, 0, 0.8);
+}
+
+.hero-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 13px;
+    margin-bottom: 16px;
+    color: #d8d8d8;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.hero-meta > span + span::before {
+    content: '•';
+    margin-right: 13px;
+    color: #777;
+}
+
+.hero-score {
+    color: #f5c518;
+}
+
+.hero-hd {
+    padding: 1px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 3px;
+    font-size: 10px;
+    line-height: 17px;
 }
 
 .hero-desc {
-    font-size: 1.1rem;
-    color: #ddd;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-    margin-bottom: 25px;
+    max-width: 580px;
+    font-size: 1.03rem;
+    line-height: 1.75;
+    color: #dedede;
+    text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.9);
+    margin-bottom: 24px;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+.hero-btns {
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 .btn-play {
     background: #fff;
     color: #000;
     border: none;
-    padding: 10px 30px;
-    font-size: 1.2rem;
+    padding: 12px 28px;
+    font-size: 1.05rem;
     font-weight: 700;
     border-radius: 4px;
     display: flex;
@@ -173,15 +243,15 @@ body {
 }
 
 .btn-play:hover {
-    transform: scale(1.05);
+    background: #e6e6e6;
 }
 
 .btn-info {
     background: rgba(109, 109, 110, 0.7);
     color: #fff;
     border: none;
-    padding: 10px 30px;
-    font-size: 1.2rem;
+    padding: 12px 26px;
+    font-size: 1.05rem;
     font-weight: 700;
     border-radius: 4px;
     display: flex;
@@ -190,11 +260,35 @@ body {
     cursor: pointer;
     transition: 0.2s;
     backdrop-filter: blur(5px);
-    margin-top: 15px;
 }
 
 .btn-info:hover {
     background: rgba(109, 109, 110, 0.5);
+}
+
+.hero-indicators {
+    right: 5%;
+    left: auto;
+    bottom: 96px;
+    margin: 0;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+.hero-indicators [data-bs-target] {
+    width: 24px;
+    height: 3px;
+    margin: 0;
+    border: 0;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.35);
+    opacity: 1;
+    transition: width 0.25s, background 0.25s;
+}
+
+.hero-indicators .active {
+    width: 42px;
+    background: #fff;
 }
 
 @media(max-width: 768px) {
@@ -207,18 +301,72 @@ body {
         height: 32px;
     }
 
+    #heroCarousel {
+        height: 82vh;
+        min-height: 600px;
+    }
+
+    #heroCarousel .carousel-inner,
     .carousel-item {
-        height: 55vh;
+        height: 100%;
+    }
+
+    .hero-bg {
+        object-position: center 18%;
+    }
+
+    .hero-overlay {
+        padding: 0 6% 13%;
+        background:
+            linear-gradient(0deg, #141414 0%, rgba(20, 20, 20, 0.98) 24%, rgba(20, 20, 20, 0.88) 50%, rgba(20, 20, 20, 0.3) 76%, transparent 100%),
+            linear-gradient(90deg, rgba(8, 8, 8, 0.78) 0%, rgba(8, 8, 8, 0.25) 65%, transparent 100%),
+            linear-gradient(180deg, rgba(0, 0, 0, 0.72) 0%, transparent 25%);
+    }
+
+    .hero-content {
+        max-width: 100%;
+    }
+
+    .hero-logo {
+        max-width: 78vw;
+        max-height: 128px;
+        margin-bottom: 13px;
     }
 
     .hero-title {
-        font-size: 2.2rem;
+        font-size: clamp(2rem, 10vw, 3rem);
+    }
+
+    .hero-kicker {
+        margin-bottom: 12px;
+    }
+
+    .hero-meta {
+        gap: 9px;
+        margin-bottom: 12px;
+        font-size: 12px;
+    }
+
+    .hero-meta > span + span::before {
+        margin-right: 9px;
+    }
+
+    .hero-desc {
+        font-size: 0.94rem;
+        line-height: 1.65;
+        -webkit-line-clamp: 2;
+        margin-bottom: 18px;
     }
 
     .btn-play,
     .btn-info {
-        padding: 8px 20px;
-        font-size: 1rem;
+        padding: 10px 18px;
+        font-size: 0.95rem;
+    }
+
+    .hero-indicators {
+        right: 6%;
+        bottom: 43px;
     }
 
     .search-section.search-active {

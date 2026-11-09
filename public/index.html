@@ -54,26 +54,46 @@
         </nav>
 
         <!-- 1. Hero Carousel -->
-        <div id="heroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-interval="6000"
-            v-if="!searched">
+        <div id="heroCarousel" ref="heroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel"
+            data-bs-interval="6000" v-if="!searched">
             <div class="carousel-inner" v-if="heroList.length > 0">
                 <div class="carousel-item" v-for="(item, index) in heroList" :key="index"
                     :class="{ active: index === 0 }">
-                    <div class="hero-bg" :style="{ backgroundImage: 'url(' + item.backdrop + ')' }"></div>
+                    <picture class="hero-media" aria-hidden="true">
+                        <source media="(max-width: 768px)" :srcset="item.poster">
+                        <source media="(min-width: 1920px)" :srcset="item.backdropOriginal">
+                        <img class="hero-bg" :src="item.backdrop" alt="" draggable="false">
+                    </picture>
                     <div class="hero-overlay">
                         <div class="hero-content">
-                            <div class="hero-tag">本周 TOP {{ index + 1 }}</div>
-                            <h1 class="hero-title">{{ item.title }}</h1>
+                            <div class="hero-kicker">
+                                <span class="hero-rank">TOP {{ index + 1 }}</span>
+                                <span>{{ item.type === 'tv' ? '本周热门剧集' : '本周热门电影' }}</span>
+                            </div>
+                            <img v-if="item.logo" class="hero-logo" :src="item.logo" :alt="item.title"
+                                @error="clearHeroLogo(item)">
+                            <h1 v-else class="hero-title">{{ item.title }}</h1>
+                            <div class="hero-meta">
+                                <span v-if="item.rating > 0" class="hero-score"><i class="fas fa-star"></i> {{ item.rating.toFixed(1) }}</span>
+                                <span v-if="item.year">{{ item.year }}</span>
+                                <span class="hero-hd">HD</span>
+                                <span>{{ item.type === 'tv' ? '剧集' : '电影' }}</span>
+                            </div>
                             <p class="hero-desc">{{ item.overview }}</p>
                             <div class="hero-btns">
-                                <button class="btn-play" @click="autoSearch(item.title)"><i class="fas fa-play"></i>
-                                    播放</button>
+                                <button class="btn-play" @click="autoSearch(item.title)"><i class="fas fa-play"></i> 播放</button>
                                 <button class="btn-info" @click="openTmdb(item, item.type)"><i
                                         class="fas fa-info-circle"></i> 更多信息</button>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
+            <div class="carousel-indicators hero-indicators" v-if="heroList.length > 1">
+                <button v-for="(item, index) in heroList" :key="'dot-' + index" type="button"
+                    data-bs-target="#heroCarousel" :data-bs-slide-to="index"
+                    :class="{ active: index === heroIndex }" :aria-current="index === heroIndex ? 'true' : 'false'"
+                    :aria-label="'切换到第 ' + (index + 1) + ' 部'"></button>
             </div>
         </div>
 
@@ -543,7 +563,10 @@
         // TMDb 由服务端 /tmdb 同源代理，前端不保存 Key 或反代域名
         const TMDB_BASE_URL = "/tmdb/3";
         const TMDB_IMG_URL = "/tmdb/t/p/w500";
-        const TMDB_BACKDROP_URL = "/tmdb/t/p/original";
+        const TMDB_BACKDROP_URL = "/tmdb/t/p/w1280";
+        const TMDB_BACKDROP_ORIGINAL_URL = "/tmdb/t/p/original";
+        const TMDB_POSTER_URL = "/tmdb/t/p/w780";
+        const TMDB_LOGO_URL = "/tmdb/t/p/w500";
         const TMDB_REGION_OPTIONS = [
             { code: 'CN', name: '中国大陆' },
             { code: 'HK', name: '中国香港' },
@@ -713,7 +736,7 @@
                     nowPlayingList: [], topRatedList: [], airingTodayList: [],
                     showDetail: false, currentGroup: null, currentSource: null,
                     episodeList: [], currentUrl: '', loadingDetail: false,
-                    imageMap: {}, fallbackMap: {}, heroList: [], scrollY: 0,
+                    imageMap: {}, fallbackMap: {}, heroList: [], heroIndex: 0, scrollY: 0,
                     hotList: [],
                     activeTab: 'video', cloudEnabled: false, cloudLoading: false,
                     cloudResults: [], cloudMessage: '', cloudError: '',
@@ -729,6 +752,7 @@
             mounted() {
                 window.addEventListener('scroll', () => { this.scrollY = window.scrollY; });
                 window.addEventListener('popstate', () => this.applyRoute());
+                document.addEventListener('slid.bs.carousel', this.handleHeroSlide);
                 window.addEventListener('keydown', (e) => {
                     if (e.key !== 'Escape') return;
                     if (this.tmdbOpen) this.closeTmdb();
@@ -744,6 +768,9 @@
                     initHotRowSwipe();
                     this.initHotRowNavStates();
                 });
+            },
+            beforeUnmount() {
+                document.removeEventListener('slid.bs.carousel', this.handleHeroSlide);
             },
             computed: {
                 groupedList() {
@@ -1071,15 +1098,76 @@
                         .then(res => res.json())
                         .then(data => {
                             if (data.results) {
-                                this.heroList = data.results.filter(i => i.backdrop_path).slice(0, 5).map(item => ({
-                                    id: item.id,
-                                    type: item.media_type === 'tv' ? 'tv' : 'movie',
-                                    title: item.title || item.name,
-                                    overview: item.overview || '精彩内容不容错过',
-                                    backdrop: `${TMDB_BACKDROP_URL}${item.backdrop_path}`
-                                }));
+                                const date = item => item.release_date || item.first_air_date || '';
+                                this.heroList = data.results.filter(i => i.backdrop_path && i.media_type !== 'person').slice(0, 5).map(item => {
+                                    const releaseDate = date(item);
+                                    return {
+                                        id: item.id,
+                                        type: item.media_type === 'tv' ? 'tv' : 'movie',
+                                        title: item.title || item.name,
+                                        overview: item.overview || '暂无简介',
+                                        backdrop: `${TMDB_BACKDROP_URL}${item.backdrop_path}`,
+                                        backdropOriginal: `${TMDB_BACKDROP_ORIGINAL_URL}${item.backdrop_path}`,
+                                        poster: `${TMDB_POSTER_URL}${item.poster_path || item.backdrop_path}`,
+                                        rating: Number(item.vote_average) || 0,
+                                        year: releaseDate ? String(releaseDate).slice(0, 4) : '',
+                                        logo: ''
+                                    };
+                                });
+                                this.heroIndex = 0;
+                                this.loadHeroLogos();
+                                this.$nextTick(() => this.startHeroCarousel());
                             }
-                        });
+                        })
+                        .catch(() => { });
+                },
+
+                async loadHeroLogos() {
+                    const languageRank = value => value === 'zh' ? 0 : value === 'en' ? 1 : !value ? 2 : value === 'ja' ? 3 : 4;
+                    await Promise.all(this.heroList.map(async (hero, index) => {
+                        try {
+                            const res = await fetch(`${TMDB_BASE_URL}/${hero.type}/${hero.id}/images?language=zh-CN&include_image_language=zh,en,ja,null`);
+                            if (!res.ok) return;
+                            const data = await res.json();
+                            const logo = (data.logos || [])
+                                .filter(item => item.file_path && (!item.iso_639_1 || ['zh', 'en', 'ja'].includes(item.iso_639_1)))
+                                .sort((a, b) => languageRank(a.iso_639_1) - languageRank(b.iso_639_1)
+                                    || Number(b.vote_average || 0) - Number(a.vote_average || 0)
+                                    || Number(b.width || 0) - Number(a.width || 0))[0];
+                            const textlessPoster = (data.posters || [])
+                                .filter(item => item.file_path && !item.iso_639_1)
+                                .sort((a, b) => Number(b.vote_average || 0) - Number(a.vote_average || 0)
+                                    || Number(b.width || 0) - Number(a.width || 0))[0];
+                            if (this.heroList[index] && (logo || textlessPoster)) {
+                                const artwork = {};
+                                if (logo) artwork.logo = this.heroLogoUrl(logo.file_path);
+                                if (textlessPoster) artwork.poster = `${TMDB_POSTER_URL}${textlessPoster.file_path}`;
+                                this.heroList[index] = Object.assign({}, this.heroList[index], artwork);
+                            }
+                        } catch (e) { }
+                    }));
+                },
+
+                startHeroCarousel() {
+                    const el = this.$refs.heroCarousel;
+                    if (!el || !window.bootstrap || !window.bootstrap.Carousel) return;
+                    const carousel = window.bootstrap.Carousel.getOrCreateInstance(el, { interval: 6000 });
+                    if (this.heroList.length > 1) carousel.cycle();
+                    else carousel.pause();
+                },
+
+                heroLogoUrl(path) {
+                    const base = /\.svg$/i.test(path) ? '/tmdb/t/p/original' : TMDB_LOGO_URL;
+                    return base + path;
+                },
+
+                handleHeroSlide(event) {
+                    if (!event.target || event.target.id !== 'heroCarousel') return;
+                    this.heroIndex = Number(event.to) || 0;
+                },
+
+                clearHeroLogo(item) {
+                    item.logo = '';
                 },
 
                 finalPoster(item, isHot = false) {
