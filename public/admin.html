@@ -48,7 +48,7 @@
                 <img class="login-logo" src="/assets/donggua-icon.png" alt="">
                 <h5 class="mb-0">冬瓜TV 管理后台</h5>
             </div>
-            <p class="text-muted small mb-4">管理采集站、网盘搜索与使用教程</p>
+            <p class="text-muted small mb-4">管理采集站、TMDb、网盘搜索与使用教程</p>
             <div class="mb-3">
                 <label class="form-label small text-muted">管理员密码</label>
                 <input type="password" v-model="password" class="form-control" placeholder="默认 admin，建议用 ADMIN_PASSWORD 环境变量修改" @keyup.enter="login">
@@ -75,6 +75,7 @@
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='sites'}" @click="tab='sites'"><i class="fas fa-database me-1"></i>采集站管理</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='import'}" @click="tab='import'"><i class="fas fa-file-import me-1"></i>导入采集源</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='cloud'}" @click="tab='cloud'"><i class="fas fa-cloud me-1"></i>网盘搜索</button></li>
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='settings'}" @click="tab='settings'"><i class="fas fa-film me-1"></i>系统设置</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='client'}" @click="openClientTab"><i class="fab fa-android me-1"></i>Android 客户端</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='backup'}" @click="openBackupTab"><i class="fas fa-box-archive me-1"></i>备份与恢复</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='guide'}" @click="tab='guide'"><i class="fas fa-circle-question me-1"></i>使用教程</button></li>
@@ -384,6 +385,88 @@
             </div>
         </div>
 
+        <!-- 系统设置 -->
+        <div v-show="tab==='settings'">
+            <div class="card p-4 mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                    <div>
+                        <h6 class="mb-1"><i class="fas fa-film text-danger me-1"></i>TMDb 影视资料</h6>
+                        <p class="text-muted small mb-0">
+                            首页推荐、海报、演员和详情页都依赖 TMDb。只需填一个凭据，不用改代码，也不用重新构建镜像。
+                        </p>
+                    </div>
+                    <span class="badge" :class="settings.tmdbConfigured ? 'bg-success' : 'bg-secondary'">
+                        {{ settings.tmdbConfigured ? '已配置' : '未配置' }}
+                    </span>
+                </div>
+
+                <div v-if="settings.tmdbSource === 'env'" class="alert alert-info py-2 small">
+                    检测到环境变量里已经有 TMDb 凭据。这里填入新凭据并保存后，会优先使用后台设置。
+                </div>
+
+                <label class="form-label small text-muted">API Key 或 Read Access Token（任选一个）</label>
+                <div class="input-group mb-2">
+                    <input class="form-control mono" :type="showTmdbCredential ? 'text' : 'password'"
+                           v-model.trim="settings.tmdbCredential"
+                           :placeholder="settings.tmdbConfigured ? '已保存 ' + settings.tmdbCredentialHint + '，粘贴新凭据可替换' : '短密钥，或 eyJ 开头的长 Read Access Token'"
+                           @keyup.enter="saveTmdb">
+                    <button class="btn btn-outline-secondary" type="button" @click="showTmdbCredential = !showTmdbCredential">
+                        <i class="fas" :class="showTmdbCredential ? 'fa-eye-slash' : 'fa-eye'"></i>
+                    </button>
+                </div>
+                <div class="form-text mb-2">
+                    只需要填一个。也可以把 TMDb 页面上的一整段文字直接粘进来，系统会自动提取有效的 Key 或 Token；
+                    不需要手动加 <code>tmdb</code>、<code>Bearer</code> 或“密钥”这些字。
+                </div>
+                <div class="small text-muted mb-3">
+                    当前识别为：<strong>{{ tmdbDetectedType }}</strong>
+                    <span v-if="settings.tmdbCredential">（尚未保存）</span>
+                    <span v-else-if="settings.tmdbSource === 'env'">（来自环境变量）</span>
+                    <span v-else-if="settings.tmdbConfigured">（后台已保存，末尾 {{ settings.tmdbCredentialHint }}）</span>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <button class="btn btn-danger btn-sm" :disabled="tmdbSaving" @click="saveTmdb">
+                        <i class="fas fa-floppy-disk me-1"></i>{{ tmdbSaving ? '保存中...' : '保存 TMDb 配置' }}
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" :disabled="tmdbTesting" @click="testTmdb">
+                        <i class="fas fa-vial me-1"></i>{{ tmdbTesting ? '测试中...' : '测试连接' }}
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" :disabled="tmdbSaving || settings.tmdbSource !== 'admin'" @click="clearTmdb">
+                        <i class="fas fa-trash-can me-1"></i>清除后台凭据
+                    </button>
+                    <a class="btn btn-outline-danger btn-sm" href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">
+                        <i class="fas fa-arrow-up-right-from-square me-1"></i>获取 TMDb 凭据
+                    </a>
+                    <span v-if="tmdbResult" class="small" :class="tmdbResult.success ? 'ok' : 'bad'">
+                        {{ tmdbResult.success ? (tmdbResult.message + (tmdbResult.latency ? '，延迟 ' + tmdbResult.latency + 'ms' : '')) : (tmdbResult.error || '测试失败') }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="card p-4">
+                <h6 class="mb-3"><i class="fas fa-circle-info text-danger me-1"></i>到底该填哪一个？</h6>
+                <table class="table table-sm small align-middle">
+                    <thead class="table-light"><tr><th>名称</th><th>大概样式</th><th>怎么用</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>API Key</td>
+                            <td class="mono">32 位字母数字</td>
+                            <td>直接粘贴到上面的输入框，系统走 v3 API。</td>
+                        </tr>
+                        <tr>
+                            <td>API Read Access Token</td>
+                            <td class="mono">eyJ... 很长一串</td>
+                            <td>也可以直接粘贴，系统自动加 Bearer 头，走 v4 API。</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <p class="small text-muted mb-0">
+                    两个不用同时填。TMDb 页面会同时展示它们，但项目只会使用其中一个；长 Token 泄露后同样要立即重置。
+                    保存后会自动进入备份，升级容器不会丢失。
+                </p>
+            </div>
+        </div>
+
         <!-- Android 客户端 -->
         <div v-show="tab==='client'">
             <div class="row g-3">
@@ -680,7 +763,12 @@ createApp({
     data() {
         return {
             loggedIn: false, password: '', loginError: '', loggingIn: false,
-            tab: 'sites', sites: [], settings: { pansouUrl: '', pansouToken: '', pansouEnabled: true },
+            tab: 'sites', sites: [],
+            settings: {
+                pansouUrl: '', pansouToken: '', pansouEnabled: true,
+                tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: ''
+            },
+            showTmdbCredential: false, tmdbSaving: false, tmdbTesting: false, tmdbResult: null,
             client: {
                 appName: '冬瓜TV', serverUrl: '', versionName: '1.0.0', versionCode: 1,
                 iconVersion: 0, iconUrl: '', buildStatus: 'idle', buildMessage: '',
@@ -701,7 +789,15 @@ createApp({
     },
     computed: {
         activeCount() { return this.sites.filter(s => s.active).length; },
-        importSelectedCount() { return this.importCandidates.filter(item => item.selected && !item.existing).length; }
+        importSelectedCount() { return this.importCandidates.filter(item => item.selected && !item.existing).length; },
+        tmdbDetectedType() {
+            const value = String(this.settings.tmdbCredential || '').trim();
+            if (value) return /eyJ/i.test(value) || value.length > 80 ? 'Read Access Token（Bearer）' : 'API Key（32 位短密钥）';
+            if (this.settings.tmdbConfigured) {
+                return this.settings.tmdbType === 'bearer' ? 'Read Access Token（Bearer）' : 'API Key（32 位短密钥）';
+            }
+            return '尚未填写';
+        }
     },
         mounted() { this.checkLogin(); },
     methods: {
@@ -736,7 +832,10 @@ createApp({
             const { data } = await this.api('/api/admin/sites');
             if (data.sites) {
                 this.sites = data.sites.map(s => Object.assign({}, s, { _originalKey: s.key }));
-                this.settings = Object.assign({ pansouUrl: '', pansouToken: '', pansouEnabled: true }, data.settings || {});
+                this.settings = Object.assign({
+                    pansouUrl: '', pansouToken: '', pansouEnabled: true,
+                    tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: ''
+                }, data.settings || {});
                 this.healthLastRun = data.health && data.health.lastRun || 0;
             }
         },
@@ -1214,6 +1313,65 @@ createApp({
             if (!value) return '-';
             const date = new Date(value);
             return isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN');
+        },
+        async saveTmdb() {
+            const credential = String(this.settings.tmdbCredential || '').trim();
+            if (!credential) {
+                this.tmdbResult = { success: false, error: '请先粘贴一个 TMDb 凭据；如需删除已保存的凭据，请点“清除后台凭据”' };
+                return;
+            }
+            this.tmdbSaving = true;
+            this.tmdbResult = null;
+            try {
+                const { data } = await this.api('/api/admin/settings', {
+                    method: 'PUT',
+                    body: JSON.stringify({ tmdbCredential: credential })
+                });
+                if (data.success) {
+                    this.settings = Object.assign({}, this.settings, data.settings || {}, { tmdbCredential: '' });
+                    const hint = this.settings.tmdbCredentialHint ? '（' + this.settings.tmdbCredentialHint + '）' : '';
+                    this.tmdbResult = { success: true, message: 'TMDb 配置已保存' + hint };
+                } else {
+                    this.tmdbResult = { success: false, error: data.error || '保存失败' };
+                }
+            } catch (e) {
+                this.tmdbResult = { success: false, error: e.message || '保存失败' };
+            }
+            this.tmdbSaving = false;
+        },
+        async clearTmdb() {
+            if (!window.confirm('清除后台保存的 TMDb 凭据？环境变量中的凭据不受影响。')) return;
+            this.tmdbSaving = true;
+            this.tmdbResult = null;
+            try {
+                const { data } = await this.api('/api/admin/settings', {
+                    method: 'PUT',
+                    body: JSON.stringify({ tmdbCredential: '' })
+                });
+                if (data.success) {
+                    this.settings = Object.assign({}, this.settings, data.settings || {}, { tmdbCredential: '' });
+                    this.tmdbResult = { success: true, message: data.settings && data.settings.tmdbSource === 'env' ? '后台凭据已清除，当前仍在使用环境变量' : '后台凭据已清除' };
+                } else {
+                    this.tmdbResult = { success: false, error: data.error || '清除失败' };
+                }
+            } catch (e) {
+                this.tmdbResult = { success: false, error: e.message || '清除失败' };
+            }
+            this.tmdbSaving = false;
+        },
+        async testTmdb() {
+            this.tmdbTesting = true;
+            this.tmdbResult = null;
+            try {
+                const { data } = await this.api('/api/admin/tmdb/test', {
+                    method: 'POST',
+                    body: JSON.stringify({ credential: this.settings.tmdbCredential })
+                });
+                this.tmdbResult = data;
+            } catch (e) {
+                this.tmdbResult = { success: false, error: e.message || '测试失败' };
+            }
+            this.tmdbTesting = false;
         },
         async saveSettings() {
             try {

@@ -90,6 +90,10 @@
                     <figcaption>Android 客户端：名称、图标、版本号与扫码绑定二维码</figcaption>
                 </figure>
                 <figure class="preview-card wide">
+                    <a href="assets/screenshots/admin-tmdb.png?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/admin-tmdb.png?v=20261109" alt="后台 TMDb 凭据设置" loading="lazy"></a>
+                    <figcaption>系统设置：短 API Key 和长 Read Access Token 任选一个，自动识别并测试</figcaption>
+                </figure>
+                <figure class="preview-card wide">
                     <a href="assets/screenshots/admin-guide.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-guide.jpg?v=20261109c" alt="后台使用教程" loading="lazy"></a>
                     <figcaption>后台内置教程：接口格式、谷歌搜索关键词、验证和排错</figcaption>
                 </figure>
@@ -107,7 +111,7 @@
             </div>
 <pre><code>git clone https://github.com/Minerchu/dongguaTV.git
 cd dongguaTV
-# 可选：复制配置模板，改管理员密码、填 TMDB Key
+# 可选：复制配置模板，至少修改管理员密码
 cp .env.example .env
 docker compose up -d --build</code></pre>
             <p>启动后访问：</p>
@@ -136,7 +140,6 @@ docker run -d --name dongguatv \
   -p 3000:3000 \
   -v dongguatv-data:/app/data \
   -e ADMIN_PASSWORD=改成你自己的密码 \
-  -e TMDB_API_KEY=你的TMDB密钥 \
   dongguatv:allinone</code></pre>
             <p>PanSou 已内置，只在容器内部监听 8888，<strong>不需要也不建议把 8888 开到公网</strong>。</p>
             <div class="warn">
@@ -147,14 +150,14 @@ docker run -d --name dongguatv \
             <h3>方式 C：不用 Docker（Node.js）</h3>
 <pre><code>npm install
 cp .env.example .env
-# 编辑 .env，至少填写 TMDB_API_KEY 和 ADMIN_PASSWORD
+# 编辑 .env，至少填写 ADMIN_PASSWORD；TMDb 可以启动后在后台填
 npm start</code></pre>
-            <p>需要 Node.js 18 以上（推荐 20 / 22）。TMDb Key 由服务端读取，不需要改前端。</p>
+            <p>需要 Node.js 18 以上（推荐 20 / 22）。TMDb 凭据由服务端读取，不需要改前端。</p>
 
             <h3>需要准备的东西</h3>
             <table>
                 <tr><th>项目</th><th>是否必须</th><th>说明</th></tr>
-                <tr><td>TMDb API Key</td><td>必须</td><td>到 TMDb 官网申请，由服务端自动转发，不需要自备接口域名</td></tr>
+                <tr><td>TMDb 凭据</td><td>需要</td><td>短 API Key 或长 Read Access Token 二选一，登录后台「系统设置」填写</td></tr>
                 <tr><td>采集站接口</td><td>必须</td><td>在后台自行添加，格式见第四节</td></tr>
                 <tr><td>PanSou</td><td>可选</td><td>网盘搜索；compose / all-in-one 已经内置</td></tr>
             </table>
@@ -225,8 +228,20 @@ environment:
             <ol>
                 <li>打开 <code>http://服务器IP:端口/admin.html</code></li>
                 <li>输入管理员密码。默认是 <code>admin</code></li>
-                <li>登录后先做两件事：改密码、加采集站</li>
+                <li>登录后先做三件事：改密码、填 TMDb 凭据、加采集站</li>
             </ol>
+
+            <h3>填写 TMDb 凭据</h3>
+            <p>打开后台「系统设置」，只粘贴其中一个凭据，点「保存 TMDb 配置」，再点「测试连接」确认可用。</p>
+            <ul>
+                <li><strong>API Key</strong>：大约 32 位字母数字，使用 TMDb 的 v3 接口。</li>
+                <li><strong>API Read Access Token</strong>：以 <code>eyJ</code> 开头的很长一串，使用 Bearer 认证。</li>
+            </ul>
+            <div class="note">
+                这两个是 TMDb 同时展示的两种凭据，<strong>只需要填一个</strong>。也可以直接把 TMDb 页面上的一整段文字粘进去，
+                系统会自动提取有效的 Key 或 Token，不需要手动加 <code>tmdb</code>、<code>Bearer</code> 或“密钥”这些字。
+                保存后后台只显示末尾四位；要更换就重新粘贴，要删除点「清除后台凭据」。后台填写的值优先于 <code>.env</code>。
+            </div>
 
             <h3>修改管理员密码</h3>
             <p>在 <code>docker-compose.yml</code> 或 <code>.env</code> 里改：</p>
@@ -550,11 +565,11 @@ proxy_buffering off;</code></pre>
                 TMDb 只提供影视资料、图片和推荐，不存储影视文件。实际播放仍来自你在后台添加的采集站。
             </div>
 
-            <p>TMDb 请求由本站服务端转发，浏览器只访问当前站点域名，API Key 不会进入前端：</p>
+            <p>TMDb 请求由本站服务端转发，浏览器只访问当前站点域名，凭据不会进入前端：</p>
             <ul>
                 <li>前端 <code>/tmdb/3/...</code> → <code>https://api.themoviedb.org/3/...</code></li>
                 <li>海报 <code>/tmdb/t/p/...</code> → <code>https://image.tmdb.org/t/p/...</code></li>
-                <li><code>TMDB_API_KEY</code> 只保存在服务端，不会出现在网页源码里</li>
+                <li>TMDb 凭据只保存在服务端或 <code>data/db.json</code>，不会出现在网页源码里</li>
             </ul>
             <div class="note">
                 这里说的内置代理只负责把 TMDb API 和图片请求转发出去，<strong>不等于给网站配置公网域名和 HTTPS</strong>。
@@ -648,7 +663,7 @@ DELETE /api/admin/client/icon</code></pre>
             </details>
             <details>
                 <summary>TMDb 首页没有内容？</summary>
-                <p>确认 <code>.env</code> 里填了 <code>TMDB_API_KEY</code>。如果服务器访问不了 TMDb，
+                <p>确认后台「系统设置」里填了 API Key 或 Read Access Token，并点过「测试连接」。如果服务器访问不了 TMDb，
                 优先换到海外服务器，或配置 <code>HTTPS_PROXY</code>；也可以把
                 <code>TMDB_API_BASE</code> / <code>TMDB_IMAGE_BASE</code> 换成你自己的代理地址。</p>
             </details>

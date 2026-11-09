@@ -42,7 +42,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-编辑 `.env`，至少设置 `ADMIN_PASSWORD` 和 `TMDB_API_KEY`。启动后访问 `http://服务器IP:3000`。
+编辑 `.env`，至少设置 `ADMIN_PASSWORD`。启动后访问 `http://服务器IP:3000`，登录后台的「系统设置」填写 TMDb 凭据；短 Key 和长 Token 任选一个，整段粘贴也能自动识别。
 
 默认会同时启动 PanSou，地址为 `http://pansou:8888`，不需要在公网开放 8888。
 
@@ -57,7 +57,6 @@ docker run -d --name dongguatv \
   -p 3000:3000 \
   -v dongguatv-data:/app/data \
   -e ADMIN_PASSWORD=你的密码 \
-  -e TMDB_API_KEY=你的密钥 \
   dongguatv:allinone
 ```
 
@@ -146,11 +145,12 @@ cp examples/adapters/generic-json.js data/adapters/
 | 变量 | 用途 |
 | --- | --- |
 | `ADMIN_PASSWORD` | 后台密码，公网部署前必须修改 |
-| `TMDB_API_KEY` | TMDb API Key，由服务端使用，不会下发到浏览器 |
+| `TMDB_API_KEY` | 短的 TMDb API Key；也可以在后台「系统设置」填写 |
+| `TMDB_READ_TOKEN` | 长的 TMDb Read Access Token；和 API Key 二选一 |
 | `HOST_PORT` | Docker 对外端口，默认 `3000` |
 | `PANSOU_URL` | 使用外部 PanSou 时填写；Compose 默认使用内置实例 |
 
-完整配置见 [.env.example](.env.example)。改端口只需在 `.env` 写 `HOST_PORT=8080`，再执行 `docker compose up -d`；容器内部仍是 `3000`。
+后台「系统设置」里填写的 TMDb 凭据优先于环境变量，两种凭据只需填一个。完整配置见 [.env.example](.env.example)。改端口只需在 `.env` 写 `HOST_PORT=8080`，再执行 `docker compose up -d`；容器内部仍是 `3000`。
 
 ## 数据与更新
 

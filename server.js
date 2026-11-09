@@ -15,6 +15,7 @@ const health = require('./health');
 const playback = require('./playback');
 const backup = require('./backup');
 const { createAdapterRegistry } = require('./adapters');
+const tmdb = require('./tmdb');
 const QRCode = require('qrcode');
 
 const app = express();
@@ -37,7 +38,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
 const TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT) || 5000;
 const PANSOU_TIMEOUT = Number(process.env.PANSOU_TIMEOUT) || 15000;
-const TMDB_API_KEY = (process.env.TMDB_API_KEY || '').trim();
 const TMDB_API_BASE = (process.env.TMDB_API_BASE || 'https://api.themoviedb.org/3').replace(/\/+$/, '');
 const TMDB_IMAGE_BASE = (process.env.TMDB_IMAGE_BASE || 'https://image.tmdb.org/t/p').replace(/\/+$/, '');
 const TMDB_API_FALLBACK = (process.env.TMDB_API_FALLBACK || (TMDB_API_BASE === 'https://api.themoviedb.org/3' ? 'https://api.tmdb.org/3' : '')).replace(/\/+$/, '');
@@ -81,17 +81,37 @@ function defaultClientSettings() {
     };
 }
 function defaultSettings() {
-    return { pansouUrl: '', pansouToken: '', pansouEnabled: true, client: defaultClientSettings() };
+    return {
+        pansouUrl: '',
+        pansouToken: '',
+        pansouEnabled: true,
+        tmdbCredential: '',
+        client: defaultClientSettings()
+    };
 }
 function normalizeSettings(input) {
     const source = input && typeof input === 'object' ? input : {};
     const merged = Object.assign(defaultSettings(), source);
+    merged.tmdbCredential = tmdb.normalizeCredential(merged.tmdbCredential).slice(0, 500);
     merged.client = Object.assign(defaultClientSettings(), source.client || {});
     const versionCode = Number(merged.client.versionCode);
     merged.client.versionCode = Number.isFinite(versionCode) && versionCode > 0 ? Math.floor(versionCode) : 1;
     merged.client.apkSize = Number(merged.client.apkSize) || 0;
     merged.client.iconVersion = Number(merged.client.iconVersion) || 0;
     return merged;
+}
+function tmdbState(settings) {
+    return tmdb.resolveCredential(settings || getDB().settings || {}, process.env);
+}
+function adminSettingsView(settings) {
+    const state = tmdbState(settings);
+    return Object.assign({}, settings, {
+        tmdbCredential: '',
+        tmdbCredentialHint: tmdb.maskCredential(state.value),
+        tmdbConfigured: Boolean(state.value),
+        tmdbType: state.type,
+        tmdbSource: state.source
+    });
 }
 function defaultDB() {
     return { sites: [], settings: defaultSettings(), version: 3 };
@@ -636,12 +656,16 @@ function normalizePansou(data, wd) {
 // ========== TMDb 同源代理 ==========
 // 前端只请求本站的 /tmdb，Key 和上游地址都留在服务端，不暴露给浏览器。
 app.get('/tmdb/3/*', async (req, res) => {
-    if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY 未配置' });
+    const credential = tmdbState();
+    if (!credential.value) {
+        return res.status(503).json({ error: 'TMDb 尚未配置，请到后台「系统设置」填写 API Key 或 Read Access Token' });
+    }
     const pathPart = String(req.params[0] || '').replace(/^\/+/, '');
     if (!pathPart || pathPart.includes('..')) return res.status(400).json({ error: '无效的 TMDb 路径' });
     const params = Object.assign({}, req.query);
     delete params.api_key;
-    params.api_key = TMDB_API_KEY;
+    const auth = tmdb.buildAuth(credential.value);
+    Object.assign(params, auth.params);
     if (!params.language) params.language = TMDB_LANGUAGE;
     const bases = [TMDB_API_BASE];
     if (TMDB_API_FALLBACK && TMDB_API_FALLBACK !== TMDB_API_BASE) bases.push(TMDB_API_FALLBACK);
@@ -649,6 +673,7 @@ app.get('/tmdb/3/*', async (req, res) => {
         try {
             const upstream = await axios.get(bases[i] + '/' + pathPart, {
                 params,
+                headers: auth.headers,
                 timeout: TMDB_TIMEOUT,
                 validateStatus: () => true
             });
@@ -696,6 +721,7 @@ app.get('/api/config', (req, res) => {
     const active = activeSites();
     res.json({
         cloudEnabled: Boolean(pansouBase()) && db.settings.pansouEnabled !== false,
+        tmdbConfigured: Boolean(tmdbState(db.settings).value),
         siteCount: active.length,
         cooling: active.filter(site => healthMonitor.isCooling(site.key)).length,
         android: publicAndroidState()
@@ -1011,7 +1037,7 @@ app.get('/api/admin/sites', requireAdmin, (req, res) => {
     }));
     res.json({
         sites,
-        settings: db.settings,
+        settings: adminSettingsView(db.settings),
         health: {
             lastRun: healthMonitor.lastRun,
             running: healthMonitor.running
@@ -1337,10 +1363,50 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
     }
     if (body.pansouToken !== undefined) db.settings.pansouToken = cleanText(body.pansouToken, 500);
     if (body.pansouEnabled !== undefined) db.settings.pansouEnabled = Boolean(body.pansouEnabled);
+    if (body.tmdbCredential !== undefined) {
+        db.settings.tmdbCredential = tmdb.normalizeCredential(body.tmdbCredential).slice(0, 500);
+    }
     saveDB(db);
     pansouTokenCache = { token: '', exp: 0 };
     invalidateCatalogCache();
-    res.json({ success: true, settings: db.settings });
+    res.json({ success: true, settings: adminSettingsView(db.settings) });
+});
+
+app.post('/api/admin/tmdb/test', requireAdmin, async (req, res) => {
+    const supplied = tmdb.normalizeCredential(req.body && req.body.credential);
+    const saved = tmdbState();
+    const credential = supplied || saved.value;
+    if (!credential) return res.status(400).json({ success: false, error: '请先填写 TMDb API Key 或 Read Access Token' });
+    const auth = tmdb.buildAuth(credential);
+    const bases = [TMDB_API_BASE];
+    if (TMDB_API_FALLBACK && TMDB_API_FALLBACK !== TMDB_API_BASE) bases.push(TMDB_API_FALLBACK);
+    let lastError = '';
+    for (const base of bases) {
+        const started = Date.now();
+        try {
+            const upstream = await axios.get(base + '/configuration', {
+                params: Object.assign({ language: TMDB_LANGUAGE }, auth.params),
+                headers: auth.headers,
+                timeout: Math.min(TMDB_TIMEOUT, 10000),
+                validateStatus: () => true
+            });
+            if (upstream.status >= 200 && upstream.status < 300) {
+                return res.json({
+                    success: true,
+                    type: auth.type,
+                    latency: Date.now() - started,
+                    message: auth.type === 'bearer' ? 'Read Access Token 有效' : 'API Key 有效'
+                });
+            }
+            if (upstream.status === 401 || upstream.status === 403) {
+                return res.json({ success: false, type: auth.type, error: '凭据无效或无权限，请重新复制 TMDb 的 API Key / Read Access Token' });
+            }
+            lastError = 'TMDb 返回 HTTP ' + upstream.status;
+        } catch (error) {
+            lastError = error.code === 'ECONNABORTED' ? '连接 TMDb 超时' : (error.message || '连接 TMDb 失败');
+        }
+    }
+    res.json({ success: false, type: auth.type, error: lastError || '连接 TMDb 失败' });
 });
 
 app.post('/api/admin/pansou/test', requireAdmin, async (req, res) => {

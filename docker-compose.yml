@@ -17,6 +17,7 @@ services:
       - PORT=3000
       - DB_PATH=/app/data/db.json
       - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TMDB_READ_TOKEN=${TMDB_READ_TOKEN:-}
       - TMDB_API_BASE=${TMDB_API_BASE:-https://api.themoviedb.org/3}
       - TMDB_IMAGE_BASE=${TMDB_IMAGE_BASE:-https://image.tmdb.org/t/p}
       # 服务器无法直连 TMDb 时，在 .env 里填写代理即可
