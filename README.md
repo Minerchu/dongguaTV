@@ -14,6 +14,14 @@
 - 教程：https://minerchu.github.io/dongguaTV/
 - 后台：`http://服务器IP:3000/admin.html`
 
+## 界面
+
+| 首页 | 详情 |
+| --- | --- |
+| ![首页](docs/assets/screenshots/home-tmdb.jpg) | ![详情](docs/assets/screenshots/tmdb-detail.jpg) |
+
+电脑和电视使用横版剧照，手机自动切换无字竖版海报。详情页由大背景、海报缩略图和 TMDb 透明 Logo 组成。
+
 ## 部署
 
 需要 Docker 20.10+ 和 Docker Compose v2。

@@ -50,19 +50,23 @@
 
         <section id="preview">
             <h2>界面预览</h2>
-            <p>截图来自实际运行的 Docker 测试实例。仓库与正式版不包含任何采集站地址，后台截图使用空白示例数据。</p>
+            <p>截图来自正式运行的 Docker 实例。首页会按屏幕宽度选择横版剧照或竖版海报，详情页使用大背景、海报缩略图和 TMDb 透明 Logo。</p>
             <div class="preview-grid">
                 <figure class="preview-card wide">
                     <a href="assets/screenshots/home-tmdb.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/home-tmdb.jpg" alt="冬瓜TV 首页 TMDb 推荐" loading="lazy"></a>
-                    <figcaption>首页：TMDb 热门、华语、日韩、港台、热映与高分推荐</figcaption>
+                    <figcaption>桌面首页：横版剧照、TMDb 透明 Logo 和自动轮播</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/tmdb-detail.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/tmdb-detail.jpg" alt="TMDb 影视详情" loading="lazy"></a>
-                    <figcaption>详情：演员、主创、分级、关键词、预告与系列作品</figcaption>
+                    <figcaption>影视详情：大背景、海报缩略图、Logo、演员与关键词</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/tmdb-providers.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/tmdb-providers.jpg" alt="TMDb 播放平台与相似推荐" loading="lazy"></a>
                     <figcaption>在哪儿看：按地区显示播放平台，并给出相似推荐</figcaption>
+                </figure>
+                <figure class="preview-card">
+                    <a href="assets/screenshots/mobile-tmdb.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/mobile-tmdb.jpg" alt="移动端首页 TMDb" loading="lazy"></a>
+                    <figcaption>手机首页：自动切换无字竖版海报，避免横向图被硬裁</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/mobile-search-results.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/mobile-search-results.jpg" alt="移动端搜索结果" loading="lazy"></a>
@@ -70,7 +74,7 @@
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/mobile-tmdb-detail.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/mobile-tmdb-detail.jpg" alt="移动端 TMDb 详情" loading="lazy"></a>
-                    <figcaption>手机端详情：点搜索结果先看 TMDb 资料，再进入播放</figcaption>
+                    <figcaption>手机端详情：竖屏布局、海报缩略图与 Logo，先看资料再找片源</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/admin-sites.jpg" target="_blank" rel="noopener"><img src="assets/screenshots/admin-sites.jpg" alt="后台采集站管理" loading="lazy"></a>
@@ -369,6 +373,7 @@ PANSOU_URL=http://你的地址:8888</code></pre>
             <h3>首页和详情页已经用到的功能</h3>
             <ul>
                 <li><strong>首页推荐</strong>：本周趋势、华语剧集、日韩剧集、港台电影、正在热映、高分电影、今日播出。</li>
+                <li><strong>海报与 Logo</strong>：电脑和电视使用横版剧照，手机使用无字竖版海报；详情页叠加 TMDb 透明 Logo，没有 Logo 时自动回退文字标题。</li>
                 <li><strong>影视详情</strong>：评分、上映日期、片长、分级、类型、关键词、主创、演员和简介。</li>
                 <li><strong>系列作品</strong>：电影属于系列时，展示同系列其他影片，可直接继续查看。</li>
                 <li><strong>预告片</strong>：优先使用 YouTube 官方预告；新片没有预告时不会显示空按钮。</li>
