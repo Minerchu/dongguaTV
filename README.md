@@ -20,8 +20,8 @@
 - Android 客户端支持扫码绑定服务器、检查更新，以及调用系统播放器或投屏应用。
 - 公开状态页 `/status`，不暴露采集站地址。
 
-教程：https://minerchu.github.io/dongguaTV/  
-后台：`http://服务器IP:3000/admin.html`
+- [部署与使用教程](https://minerchu.github.io/dongguaTV/)
+- 后台地址：`http://服务器IP:3000/admin.html`
 
 ## 界面
 
