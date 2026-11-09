@@ -83,17 +83,51 @@
         <!-- 采集站 -->
         <div v-show="tab==='sites'">
             <div class="card p-3 mb-3">
-                <h6 class="mb-3"><i class="fas fa-plus text-danger me-1"></i>添加采集站</h6>
-                <div class="row g-2">
-                    <div class="col-md-3"><input class="form-control" v-model.trim="form.name" placeholder="站点名称，如：我的资源站"></div>
-                    <div class="col-md-6"><input class="form-control mono" v-model.trim="form.api" placeholder="https://example.com/api.php/provide/vod"></div>
-                    <div class="col-md-3 d-flex gap-2">
-                        <button class="btn btn-danger flex-fill" :disabled="adding" @click="addSite(true)">
-                            <i class="fas fa-vial me-1"></i>{{ adding ? '检测中...' : '测试并添加' }}
-                        </button>
-                        <button class="btn btn-outline-secondary" :disabled="adding" @click="addSite(false)" title="跳过测试直接添加">直接添加</button>
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h6 class="mb-0"><i class="fas fa-plus text-danger me-1"></i>添加采集站</h6>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn" :class="form.mode==='maccms' ? 'btn-danger' : 'btn-outline-secondary'" @click="form.mode='maccms'">Maccms 接口</button>
+                        <button class="btn" :class="form.mode==='adapter' ? 'btn-danger' : 'btn-outline-secondary'" @click="form.mode='adapter'">自定义适配器</button>
                     </div>
                 </div>
+                <template v-if="form.mode==='maccms'">
+                    <div class="row g-2">
+                        <div class="col-md-3"><input class="form-control" v-model.trim="form.name" placeholder="站点名称，如：我的资源站"></div>
+                        <div class="col-md-6"><input class="form-control mono" v-model.trim="form.api" placeholder="https://example.com/api.php/provide/vod"></div>
+                        <div class="col-md-3 d-flex gap-2">
+                            <button class="btn btn-danger flex-fill" :disabled="adding" @click="addSite(true)">
+                                <i class="fas fa-vial me-1"></i>{{ adding ? '检测中...' : '测试并添加' }}
+                            </button>
+                            <button class="btn btn-outline-secondary" :disabled="adding" @click="addSite(false)" title="跳过测试直接添加">直接添加</button>
+                        </div>
+                    </div>
+                </template>
+                <template v-else>
+                    <div v-if="adapters.length===0" class="alert alert-secondary py-2 small">
+                        <i class="fas fa-circle-info me-1"></i>
+                        还没有安装适配器。把第三方适配器的 <code>.js</code> 文件放进服务器的 <code>data/adapters/</code>，然后点下方「重载适配器」。
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-3"><input class="form-control" v-model.trim="form.name" placeholder="站点名称"></div>
+                        <div class="col-md-3">
+                            <select class="form-select" v-model="form.adapter">
+                                <option value="" disabled>选择适配器</option>
+                                <option v-for="adapter in adapters" :key="adapter.id" :value="adapter.id">{{ adapter.name }}（{{ adapter.id }}）</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6"><input class="form-control mono" v-model.trim="form.baseUrl" placeholder="https://example.com（适配器需要的基础地址）"></div>
+                    </div>
+                    <div class="mt-2">
+                        <label class="form-label small text-muted mb-1">适配器配置 JSON</label>
+                        <textarea class="form-control mono" rows="3" v-model="form.adapterConfig" placeholder='{"key":"value"}'></textarea>
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <button class="btn btn-danger" :disabled="adding || adapters.length===0" @click="addSite(true)">
+                            <i class="fas fa-vial me-1"></i>{{ adding ? '检测中...' : '测试并添加' }}
+                        </button>
+                        <button class="btn btn-outline-secondary" :disabled="adding || adapters.length===0" @click="addSite(false)">直接添加</button>
+                    </div>
+                </template>
                 <div v-if="formResult" class="alert mt-3 mb-0 py-2 small" :class="formResult.ok ? 'alert-success' : 'alert-danger'">
                     <template v-if="formResult.ok">
                         <i class="fas fa-circle-check me-1"></i>连接正常，延迟 {{ formResult.latency }}ms，本页返回 {{ formResult.count }} 条数据
@@ -101,6 +135,36 @@
                     </template>
                     <template v-else><i class="fas fa-circle-xmark me-1"></i>{{ formResult.message || formResult.error }}</template>
                 </div>
+            </div>
+
+            <div class="card p-3 mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <div>
+                        <h6 class="mb-1"><i class="fas fa-plug text-danger me-1"></i>已安装适配器</h6>
+                        <p class="text-muted small mb-0">适配器运行在服务端，适合接入非 Maccms 的 JSON 或 HTML 站点。安装文件放在 <code>data/adapters/</code>。</p>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm" :disabled="adapterLoading" @click="reloadAdapters">
+                        <i class="fas fa-rotate me-1"></i>{{ adapterLoading ? '重载中...' : '重载适配器' }}
+                    </button>
+                </div>
+                <div v-if="adapterMessage" class="alert mt-3 mb-0 py-2 small" :class="adapterMessage.ok ? 'alert-success' : 'alert-danger'">
+                    {{ adapterMessage.text }}
+                </div>
+                <div class="table-responsive mt-3" v-if="adapters.length">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>名称</th><th>标识</th><th>版本</th><th>说明</th><th>文件</th></tr></thead>
+                        <tbody>
+                            <tr v-for="adapter in adapters" :key="adapter.id">
+                                <td>{{ adapter.name }}</td>
+                                <td class="mono">{{ adapter.id }}</td>
+                                <td>{{ adapter.version || '-' }}</td>
+                                <td class="small text-muted">{{ adapter.description || '-' }}</td>
+                                <td class="mono small">{{ adapter.file }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-else class="text-muted small mt-3">暂无适配器。内置 Maccms 接口不需要适配器。</div>
             </div>
 
             <div class="card p-3 mb-3 d-flex flex-column flex-md-row flex-wrap justify-content-between align-items-md-center gap-2">
@@ -159,7 +223,13 @@
                                 </td>
                                 <td><input class="form-control form-control-sm" v-model="site.name"></td>
                                 <td><input class="form-control form-control-sm mono" v-model="site.key"></td>
-                                <td><input class="form-control form-control-sm mono" v-model="site.api"></td>
+                                <td>
+                                    <template v-if="site.adapter">
+                                        <span class="badge text-bg-secondary mb-1">适配器 · {{ site.adapter }}</span>
+                                        <input class="form-control form-control-sm mono" v-model="site.baseUrl" placeholder="基础地址">
+                                    </template>
+                                    <input v-else class="form-control form-control-sm mono" v-model="site.api">
+                                </td>
                                 <td>
                                     <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" v-model="site.active">
@@ -183,7 +253,7 @@
             </div>
             <p class="text-muted small mt-3 mb-0">
                 提示：修改名称 / 地址 / 启用状态后，记得点该行的 <i class="fas fa-floppy-disk"></i> 保存。
-                API 地址只支持 <strong>Maccms V10 JSON 接口</strong>，不确定格式请先看「使用教程」。
+                Maccms 接口直接填 <strong>API 地址</strong>；非 Maccms 站点先用适配器接入，再在这里选择对应的「自定义适配器」。
             </p>
         </div>
 
@@ -356,6 +426,22 @@
                             </div>
                         </div>
 
+                        <div v-if="client.serverUrl" class="row g-3 align-items-center mt-2 p-3 rounded border bg-light-subtle">
+                            <div class="col-12 col-md-auto text-center">
+                                <img class="border rounded bg-white p-2" style="display:block;width:150px;max-width:100%;height:auto;margin:0 auto"
+                                     :src="'/api/admin/client/qr.png?url=' + encodeURIComponent(client.serverUrl)"
+                                     alt="Android 扫码绑定二维码">
+                            </div>
+                            <div class="col-12 col-md">
+                                <div class="fw-semibold mb-1"><i class="fas fa-qrcode text-danger me-1"></i>扫码绑定服务器</div>
+                                <p class="small text-muted mb-1">
+                                    安装 APK 后，在首次连接页或「设置」里点「扫码绑定」，直接扫描这个二维码即可。
+                                    二维码只包含服务器地址，不包含后台密码。
+                                </p>
+                                <p class="small text-muted mb-0">修改上面的服务器地址并保存后，二维码会自动更新。</p>
+                            </div>
+                        </div>
+
                         <div class="d-flex align-items-center gap-3 mt-4">
                             <div class="client-icon-preview">
                                 <img v-if="client.iconUrl" :src="client.iconUrl" alt="客户端图标">
@@ -412,7 +498,7 @@
                         <div class="client-step"><span>2</span><div>填写应用名称，上传正方形 PNG 图标。</div></div>
                         <div class="client-step"><span>3</span><div>服务器地址必须是手机能访问的地址，建议使用已经配置好的 HTTPS 域名。</div></div>
                         <div class="client-step"><span>4</span><div>点击「保存并生成 APK」，等待状态变成已生成。</div></div>
-                        <div class="client-step"><span>5</span><div>在首页或本页下载 APK，安装到 Android 手机即可。</div></div>
+                        <div class="client-step"><span>5</span><div>在首页或本页下载 APK，安装后可用「扫码绑定」直接连接本站。</div></div>
                     </div>
                     <div class="card p-4">
                         <h6 class="mb-2"><i class="fas fa-shield-halved text-danger me-1"></i>签名与更新</h6>
@@ -604,7 +690,9 @@ createApp({
             clientSaving: false, clientMessage: null, clientTimer: null,
             status: {}, testingAll: false,
             healthRunning: false, healthLastRun: 0,
-            form: { name: '', api: '' }, formResult: null, adding: false,
+            adapters: [], adapterLoading: false, adapterMessage: null,
+            form: { mode: 'maccms', name: '', api: '', adapter: '', baseUrl: '', adapterConfig: '{}' },
+            formResult: null, adding: false,
             importMode: 'tvbox', tvboxText: '', maccmsText: '', importParsing: false, importImporting: false,
             importCandidates: [], importErrors: [], importStats: null, importMessage: null,
             pansouResult: null,
@@ -627,14 +715,14 @@ createApp({
         async checkLogin() {
             try {
                 const { data } = await this.api('/api/admin/me');
-                if (data.loggedIn) { this.loggedIn = true; await this.loadSites(); await this.loadClient(); }
+                if (data.loggedIn) { this.loggedIn = true; await this.loadSites(); await this.loadAdapters(); await this.loadClient(); }
             } catch (e) { }
         },
         async login() {
             this.loginError = ''; this.loggingIn = true;
             try {
                 const { res, data } = await this.api('/api/admin/login', { method: 'POST', body: JSON.stringify({ password: this.password }) });
-                if (data.success) { this.loggedIn = true; this.password = ''; await this.loadSites(); await this.loadClient(); }
+                if (data.success) { this.loggedIn = true; this.password = ''; await this.loadSites(); await this.loadAdapters(); await this.loadClient(); }
                 else this.loginError = data.error || (res.status === 429 ? '尝试次数过多' : '密码不正确');
             } catch (e) { this.loginError = '无法连接服务器'; }
             this.loggingIn = false;
@@ -642,7 +730,7 @@ createApp({
         async logout() {
             try { await this.api('/api/admin/logout', { method: 'POST' }); } catch (e) { }
             if (this.clientTimer) { clearTimeout(this.clientTimer); this.clientTimer = null; }
-            this.loggedIn = false; this.sites = []; this.clientMessage = null;
+            this.loggedIn = false; this.sites = []; this.adapters = []; this.clientMessage = null;
         },
         async loadSites() {
             const { data } = await this.api('/api/admin/sites');
@@ -651,6 +739,37 @@ createApp({
                 this.settings = Object.assign({ pansouUrl: '', pansouToken: '', pansouEnabled: true }, data.settings || {});
                 this.healthLastRun = data.health && data.health.lastRun || 0;
             }
+        },
+        async loadAdapters() {
+            try {
+                const { data } = await this.api('/api/admin/adapters');
+                if (data.adapters) {
+                    this.adapters = data.adapters;
+                    if (!this.form.adapter && this.adapters.length) this.form.adapter = this.adapters[0].id;
+                }
+            } catch (e) { }
+        },
+        async reloadAdapters() {
+            this.adapterLoading = true;
+            this.adapterMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/adapters/reload', { method: 'POST' });
+                if (data.success) {
+                    this.adapters = data.adapters || [];
+                    if (!this.adapters.some(item => item.id === this.form.adapter)) {
+                        this.form.adapter = this.adapters[0] ? this.adapters[0].id : '';
+                    }
+                    this.adapterMessage = {
+                        ok: true,
+                        text: '已重新加载 ' + this.adapters.length + ' 个适配器' + (data.lastError ? '；最近错误：' + data.lastError : '')
+                    };
+                } else {
+                    this.adapterMessage = { ok: false, text: data.error || data.lastError || '重载失败' };
+                }
+            } catch (e) {
+                this.adapterMessage = { ok: false, text: e.message || '重载失败' };
+            }
+            this.adapterLoading = false;
         },
         openClientTab() {
             this.tab = 'client';
@@ -793,17 +912,44 @@ createApp({
             return value + ' B';
         },
         async addSite(withTest) {
-            if (!this.form.name || !this.form.api) return alert('请填写站点名称和 API 地址');
+            if (!this.form.name) return alert('请填写站点名称');
+            const body = { name: this.form.name, test: withTest };
+            if (this.form.mode === 'adapter') {
+                if (!this.form.adapter) return alert('请先选择适配器');
+                let adapterConfig = {};
+                try {
+                    adapterConfig = this.form.adapterConfig.trim() ? JSON.parse(this.form.adapterConfig) : {};
+                } catch (e) {
+                    return alert('适配器配置不是有效 JSON：' + e.message);
+                }
+                Object.assign(body, {
+                    adapter: this.form.adapter,
+                    baseUrl: this.form.baseUrl,
+                    adapterConfig
+                });
+            } else {
+                if (!this.form.api) return alert('请填写 Maccms API 地址');
+                body.api = this.form.api;
+            }
             this.adding = true; this.formResult = null;
             try {
                 const { data } = await this.api('/api/admin/sites', {
                     method: 'POST',
-                    body: JSON.stringify({ name: this.form.name, api: this.form.api, test: withTest })
+                    body: JSON.stringify(body)
                 });
                 if (data.success) {
                     this.formResult = withTest ? Object.assign({ ok: true }, data.test) : null;
                     if (withTest && data.test && !data.test.ok) this.formResult = data.test;
-                    if (!withTest || (data.test && data.test.ok)) { this.form = { name: '', api: '' }; }
+                    if (!withTest || (data.test && data.test.ok)) {
+                        this.form = {
+                            mode: this.form.mode,
+                            name: '',
+                            api: '',
+                            adapter: this.form.adapter,
+                            baseUrl: '',
+                            adapterConfig: this.form.adapterConfig
+                        };
+                    }
                     await this.loadSites();
                     if (data.test) this.status[data.site.key] = data.test;
                 } else {
@@ -816,7 +962,10 @@ createApp({
             const key = site.key;
             this.status[key] = { loading: true };
             try {
-                const { data } = await this.api('/api/admin/sites/test', { method: 'POST', body: JSON.stringify({ api: site.api }) });
+                const { data } = await this.api('/api/admin/sites/test', {
+                    method: 'POST',
+                    body: JSON.stringify({ key: site._originalKey || site.key })
+                });
                 this.status[key] = { ok: Boolean(data.success), latency: data.latency || 0, message: data.message };
             } catch (e) { this.status[key] = { ok: false }; }
         },
@@ -868,11 +1017,22 @@ createApp({
             this.healthRunning = false;
         },
         async saveSite(site) {
-            if (!site.name || !site.api) return alert('名称和地址不能为空');
+            if (!site.name) return alert('名称不能为空');
+            if (!site.adapter && !site.api) return alert('API 地址不能为空');
+            const body = { name: site.name, active: site.active, key: site.key };
+            if (site.adapter) {
+                Object.assign(body, {
+                    adapter: site.adapter,
+                    baseUrl: site.baseUrl || '',
+                    adapterConfig: site.adapterConfig || {}
+                });
+            } else {
+                body.api = site.api;
+            }
             try {
                 const { data } = await this.api('/api/admin/sites/' + encodeURIComponent(site._originalKey || site.key), {
                     method: 'PUT',
-                    body: JSON.stringify({ name: site.name, api: site.api, active: site.active, key: site.key })
+                    body: JSON.stringify(body)
                 });
                 if (data.success) {
                     site._originalKey = data.site.key;

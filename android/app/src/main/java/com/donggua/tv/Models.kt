@@ -4,6 +4,7 @@ data class AndroidRelease(
     val available: Boolean,
     val downloadUrl: String,
     val version: String,
+    val versionCode: Int,
     val size: Long,
     val builtAt: String
 )

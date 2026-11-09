@@ -108,14 +108,14 @@ function createHealthMonitor(options) {
     async function checkSites(sites, checkOptions) {
         if (typeof config.check !== 'function') throw new Error('健康检查函数未配置');
         const opts = checkOptions || {};
-        const list = (Array.isArray(sites) ? sites : []).filter(site => site && site.api && site.active !== false);
+        const list = (Array.isArray(sites) ? sites : []).filter(site => site && (site.api || site.adapter) && site.active !== false);
         const targets = opts.force ? list : list.filter(site => !isCooling(site.key));
         running = true;
         try {
             await mapLimit(targets, config.concurrency, async site => {
                 const started = now();
                 try {
-                    const result = await config.check(site.api);
+                    const result = await config.check(site);
                     if (result && result.ok) recordSuccess(site.key, result.latency || (now() - started));
                     else recordFailure(site.key, result && result.message);
                 } catch (error) {

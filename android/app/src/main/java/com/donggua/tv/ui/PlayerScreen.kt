@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -154,6 +155,16 @@ fun PlayerScreen(session: AppSession, onBack: () -> Unit) {
                 }
             }
             IconButton(
+                onClick = { if (current != null) openVideoExternal(context, current.url) },
+                enabled = current != null
+            ) {
+                Icon(
+                    Icons.Filled.OpenInNew,
+                    contentDescription = "用其他播放器或投屏应用打开",
+                    tint = if (current != null) Color.White else Color(0x55FFFFFF)
+                )
+            }
+            IconButton(
                 onClick = { if (index > 0) index-- },
                 enabled = index > 0
             ) {
@@ -194,10 +205,10 @@ fun PlayerScreen(session: AppSession, onBack: () -> Unit) {
                         Text("重试")
                     }
                     Button(
-                        onClick = { openExternal(context, current.url) },
+                        onClick = { openVideoExternal(context, current.url) },
                         shape = RoundedCornerShape(50)
                     ) {
-                        Text("浏览器播放")
+                        Text("其他播放器 / 投屏")
                     }
                 }
             }

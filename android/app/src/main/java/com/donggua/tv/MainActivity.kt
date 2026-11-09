@@ -1,6 +1,8 @@
 package com.donggua.tv
 
+import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +25,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -45,6 +49,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.donggua.tv.ui.MainNavigation
+import com.donggua.tv.ui.PairingBus
+import com.donggua.tv.ui.ScanServerButton
 import kotlinx.coroutines.launch
 
 private val DongguaColorScheme = darkColorScheme(
@@ -87,6 +93,7 @@ class AppSession {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PairingBus.emit(intent?.dataString)
         setContent {
             DongguaTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -94,6 +101,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        PairingBus.emit(intent.dataString)
     }
 }
 
@@ -104,6 +117,25 @@ private fun DongguaApp() {
     val api = remember { DongguaApi(prefs) }
     var serverUrl by remember { mutableStateOf(prefs.serverUrl) }
     val appName = stringResource(R.string.app_name)
+    val pendingPairing by PairingBus.pending.collectAsState()
+
+    LaunchedEffect(pendingPairing) {
+        val target = pendingPairing ?: return@LaunchedEffect
+        try {
+            val config = api.probe(target)
+            if (config.siteCount == 0) {
+                Toast.makeText(context, "连接成功，但站长还没有配置采集站", Toast.LENGTH_LONG).show()
+            } else {
+                prefs.saveServerUrl(target)
+                serverUrl = prefs.serverUrl
+                Toast.makeText(context, "已连接 ${config.siteCount} 个采集站", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(context, e.message ?: "二维码里的服务器无法连接", Toast.LENGTH_LONG).show()
+        } finally {
+            PairingBus.consume()
+        }
+    }
 
     if (serverUrl.isBlank()) {
         SetupScreen(
@@ -136,6 +168,29 @@ private fun SetupScreen(api: DongguaApi, appName: String, onConnected: (String) 
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
+    fun connect(raw: String) {
+        if (raw.isBlank()) {
+            error = "请填写服务器地址"
+            return
+        }
+        scope.launch {
+            loading = true
+            error = ""
+            try {
+                val config = api.probe(raw)
+                if (config.siteCount == 0) {
+                    error = "连接成功，但站长还没有配置采集站"
+                } else {
+                    onConnected(normalizeServerUrl(raw))
+                }
+            } catch (e: Exception) {
+                error = e.message ?: "无法连接到服务器"
+            } finally {
+                loading = false
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
@@ -164,6 +219,13 @@ private fun SetupScreen(api: DongguaApi, appName: String, onConnected: (String) 
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp)
             )
+            ScanServerButton(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                label = "扫码连接服务器"
+            ) { scanned ->
+                input = scanned
+                connect(scanned)
+            }
             if (error.isNotBlank()) {
                 Text(
                     error,
@@ -174,27 +236,7 @@ private fun SetupScreen(api: DongguaApi, appName: String, onConnected: (String) 
                 )
             }
             Button(
-                onClick = {
-                    if (input.isBlank()) {
-                        error = "请填写服务器地址"
-                        return@Button
-                    }
-                    scope.launch {
-                        loading = true
-                        try {
-                            val config = api.probe(input)
-                            if (config.siteCount == 0) {
-                                error = "连接成功，但站长还没有配置采集站"
-                            } else {
-                                onConnected(normalizeServerUrl(input))
-                            }
-                        } catch (e: Exception) {
-                            error = e.message ?: "无法连接到服务器"
-                        } finally {
-                            loading = false
-                        }
-                    }
-                },
+                onClick = { connect(input) },
                 enabled = !loading,
                 modifier = Modifier.fillMaxWidth().padding(top = 18.dp).height(50.dp),
                 shape = RoundedCornerShape(14.dp)

@@ -324,6 +324,7 @@
                 <div class="section-header">
                     <div class="section-line"></div>
                     <div class="section-title"><i class="fas fa-calendar-day"></i> 今日播出·追剧日历</div>
+                    <button class="section-more" @click="openCalendar"><i class="fas fa-calendar-plus"></i> 完整日历</button>
                     <div class="hot-row-nav">
                         <button class="nav-btn nav-prev" @click="scrollHotRow('airing', 'prev')"><i class="fas fa-chevron-left"></i></button>
                         <button class="nav-btn nav-next" @click="scrollHotRow('airing', 'next')"><i class="fas fa-chevron-right"></i></button>
@@ -417,6 +418,7 @@
                                 <span class="tag-mini" v-for="tag in item.tags" :key="tag">{{ tag }}</span>
                             </span>
                             <div class="cloud-actions">
+                                <button class="btn-copy" @click="copyCloudItem(item)">复制链接</button>
                                 <span v-if="item.password" class="pwd">提取码 <b>{{ item.password }}</b></span>
                                 <button v-if="item.password" class="btn-copy" @click="copyText(item.password)">复制</button>
                                 <a :href="item.url" target="_blank" rel="noopener noreferrer" class="btn-open">
@@ -568,10 +570,23 @@
                             </div>
                         </div>
 
+                        <div class="tmdb-block" v-if="tmdbKeyCrew.length">
+                            <h3>主创</h3>
+                            <div class="tmdb-crew-row">
+                                <button class="tmdb-crew-chip" v-for="person in tmdbKeyCrew" :key="person.credit_id || person.id" @click="openPerson(person)">
+                                    <span class="tmdb-crew-avatar">
+                                        <img v-if="person.profile_path" :src="tmdbImg(person.profile_path, 'w92')" :alt="person.name" loading="lazy">
+                                        <i v-else class="fas fa-user"></i>
+                                    </span>
+                                    <span class="tmdb-crew-copy"><b>{{ person.name }}</b><small>{{ person.job || person.known_for_department }}</small></span>
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="tmdb-block" v-if="tmdbCast.length">
                             <h3>主要演员</h3>
                             <div class="tmdb-cast-row">
-                                <div class="tmdb-cast-card" v-for="person in tmdbCast" :key="person.id || person.name">
+                                <div class="tmdb-cast-card" v-for="person in tmdbCast" :key="person.id || person.name" @click="openPerson(person)">
                                     <div class="tmdb-cast-photo">
                                         <img v-if="person.profile_path" :src="tmdbImg(person.profile_path, 'w185')" :alt="person.name" loading="lazy">
                                         <i v-else class="fas fa-user"></i>
@@ -620,6 +635,115 @@
             </div>
         </div>
 
+        <!-- 人物页 -->
+        <div class="tmdb-overlay person-overlay" :class="{ active: personOpen }" @click.self="closePerson">
+            <button class="close-btn" @click="closePerson" aria-label="关闭"><i class="fas fa-times"></i></button>
+            <div v-if="personLoading" class="tmdb-loading">
+                <div class="spinner-border text-danger"></div>
+                <div class="mt-3">正在读取人物资料...</div>
+            </div>
+            <div v-else-if="personError" class="tmdb-loading">{{ personError }}</div>
+            <div v-else-if="personInfo" class="person-sheet">
+                <div class="person-hero">
+                    <img v-if="personInfo.profile_path" :src="tmdbImg(personInfo.profile_path, 'original')" alt="">
+                    <div class="person-hero-shade"></div>
+                    <div class="person-kind">人物 · TMDb</div>
+                </div>
+                <div class="person-body">
+                    <div class="person-profile">
+                        <img v-if="personInfo.profile_path" :src="tmdbImg(personInfo.profile_path, 'w342')" :alt="personInfo.name">
+                        <div v-else class="person-profile-empty"><i class="fas fa-user"></i></div>
+                    </div>
+                    <div class="person-main">
+                        <div class="person-kicker">{{ personInfo.known_for_department || '影视人物' }}</div>
+                        <h2>{{ personInfo.name }}</h2>
+                        <div class="person-meta">
+                            <span v-if="personInfo.birthday">出生于 {{ personInfo.birthday }}</span>
+                            <span v-if="personInfo.deathday">逝世于 {{ personInfo.deathday }}</span>
+                            <span v-if="personInfo.place_of_birth">{{ personInfo.place_of_birth }}</span>
+                        </div>
+                        <p class="person-bio">{{ personInfo.biography || 'TMDb 暂无中文简介。' }}</p>
+                        <div class="tmdb-actions">
+                            <a v-if="personInfo.homepage" :href="personInfo.homepage" target="_blank" rel="noopener noreferrer" class="tmdb-action"><i class="fas fa-globe"></i> 官网</a>
+                            <a v-if="personInfo.imdb_id" :href="'https://www.imdb.com/name/' + personInfo.imdb_id" target="_blank" rel="noopener noreferrer" class="tmdb-action">IMDb</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="person-filmography" v-if="personCredits.length">
+                    <div class="person-section-head">
+                        <h3>代表作品</h3>
+                        <span>按热度排序</span>
+                    </div>
+                    <div class="person-credit-grid">
+                        <button class="person-credit-card" v-for="credit in personCredits" :key="credit.media_type + '-' + credit.id" @click="openPersonTitle(credit)">
+                            <span class="person-credit-poster">
+                                <img v-if="credit.poster_path" :src="tmdbImg(credit.poster_path, 'w185')" :alt="tmdbTitleText(credit)" loading="lazy">
+                                <i v-else class="fas fa-film"></i>
+                            </span>
+                            <span class="person-credit-name">{{ tmdbTitleText(credit) }}</span>
+                            <span class="person-credit-meta">{{ tmdbDateText(credit) }}<template v-if="credit.character"> · {{ credit.character }}</template></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 完整追剧日历 -->
+        <div class="tmdb-overlay calendar-overlay" :class="{ active: calendarOpen }" @click.self="closeCalendar">
+            <button class="close-btn" @click="closeCalendar" aria-label="关闭"><i class="fas fa-times"></i></button>
+            <div class="calendar-sheet">
+                <div class="calendar-head">
+                    <div>
+                        <div class="calendar-kicker">TMDb · 追剧日历</div>
+                        <h2>电影与剧集上映时间</h2>
+                    </div>
+                    <div class="calendar-date-title">{{ calendarDateLabel }}</div>
+                </div>
+                <div class="calendar-days">
+                    <button v-for="day in calendarDays" :key="day.date" class="calendar-day" :class="{ active: day.date === calendarDate, today: day.isToday }" @click="selectCalendarDay(day.date)">
+                        <span>{{ day.weekday }}</span>
+                        <b>{{ day.day }}</b>
+                        <small>{{ day.month }}</small>
+                    </button>
+                </div>
+                <div v-if="calendarLoading" class="tmdb-loading calendar-loading">
+                    <div class="spinner-border text-danger"></div>
+                    <div class="mt-3">正在加载当天内容...</div>
+                </div>
+                <div v-else-if="calendarError" class="cloud-empty">{{ calendarError }}</div>
+                <div v-else class="calendar-content">
+                    <section class="calendar-section">
+                        <div class="person-section-head"><h3>电影</h3><span>{{ calendarMovies.length }} 部</span></div>
+                        <div v-if="calendarMovies.length" class="calendar-grid">
+                            <div class="hot-card" v-for="item in calendarMovies" :key="'movie-' + item.id" @click="openTmdb(item, 'movie')">
+                                <div class="poster-wrap">
+                                    <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
+                                    <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ (Number(item.vote_average) || 0).toFixed(1) }}</div>
+                                </div>
+                                <div class="movie-name">{{ item.title }}</div>
+                                <div class="movie-date">{{ tmdbDateText(item) }}</div>
+                            </div>
+                        </div>
+                        <div v-else class="calendar-empty">当天暂无电影上映数据</div>
+                    </section>
+                    <section class="calendar-section">
+                        <div class="person-section-head"><h3>剧集</h3><span>{{ calendarTv.length }} 部</span></div>
+                        <div v-if="calendarTv.length" class="calendar-grid">
+                            <div class="hot-card" v-for="item in calendarTv" :key="'tv-' + item.id" @click="openTmdb(item, 'tv')">
+                                <div class="poster-wrap">
+                                    <img :src="tmdbImg(item.poster_path, 'w300')" loading="lazy">
+                                    <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ (Number(item.vote_average) || 0).toFixed(1) }}</div>
+                                </div>
+                                <div class="movie-name">{{ item.name }}</div>
+                                <div class="movie-date">{{ tmdbDateText(item) }}</div>
+                            </div>
+                        </div>
+                        <div v-else class="calendar-empty">当天暂无剧集开播数据</div>
+                    </section>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script>
@@ -645,6 +769,11 @@
         function detectTmdbRegion() {
             const region = String(navigator.language || 'zh-CN').split('-')[1] || 'CN';
             return TMDB_REGION_OPTIONS.some(opt => opt.code === region.toUpperCase()) ? region.toUpperCase() : 'CN';
+        }
+
+        function localDateIso(date) {
+            const value = date || new Date();
+            return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0');
         }
 
         function setAppRoute(url, replace = false) {
@@ -810,6 +939,11 @@
                     tmdbRegionOptions: TMDB_REGION_OPTIONS, tmdbRequestSeq: 0,
                     tmdbAgeRating: '', tmdbKeywords: [], tmdbCollectionParts: [],
                     tmdbSearchGroup: null, tmdbReturnRoute: '/', tmdbSearchSeq: 0,
+                    personOpen: false, personLoading: false, personError: '', personInfo: null,
+                    personCredits: [], personRequestSeq: 0, personReturnRoute: '/',
+                    calendarOpen: false, calendarLoading: false, calendarError: '',
+                    calendarDate: localDateIso(), calendarDateLabel: '', calendarReturnRoute: '/',
+                    calendarMovies: [], calendarTv: [], calendarRequestSeq: 0,
                     androidApp: null,
                     watchHistory: [], favorites: [], currentEpisode: null, currentEpisodeIndex: -1,
                     currentProgress: 0, currentDuration: 0, playerNotice: '',
@@ -823,7 +957,9 @@
                 document.addEventListener('slid.bs.carousel', this.handleHeroSlide);
                 window.addEventListener('keydown', (e) => {
                     if (e.key !== 'Escape') return;
-                    if (this.tmdbOpen) this.closeTmdb();
+                    if (this.personOpen) this.closePerson();
+                    else if (this.calendarOpen) this.closeCalendar();
+                    else if (this.tmdbOpen) this.closeTmdb();
                     else if (this.showDetail) this.closeDetail();
                 });
                 this.fetchHero();
@@ -898,6 +1034,37 @@
                         .forEach(person => names.push(person.name));
                     const unique = [...new Set(names.filter(Boolean))];
                     return unique.length ? '主创：' + unique.slice(0, 6).join('、') : '';
+                },
+                tmdbKeyCrew() {
+                    const priority = ['Director', 'Creator', 'Screenplay', 'Writer', 'Story'];
+                    const seen = new Set();
+                    return this.tmdbCrew
+                        .filter(person => person && person.id && priority.includes(person.job))
+                        .filter(person => {
+                            if (seen.has(person.id)) return false;
+                            seen.add(person.id);
+                            return true;
+                        })
+                        .sort((a, b) => priority.indexOf(a.job) - priority.indexOf(b.job))
+                        .slice(0, 8);
+                },
+                calendarDays() {
+                    const selected = new Date(this.calendarDate + 'T12:00:00');
+                    const today = localDateIso();
+                    const start = new Date(selected.getTime());
+                    start.setDate(start.getDate() - 1);
+                    return Array.from({ length: 7 }, (_, index) => {
+                        const day = new Date(start.getTime());
+                        day.setDate(day.getDate() + index);
+                        const date = localDateIso(day);
+                        return {
+                            date,
+                            day: String(day.getDate()).padStart(2, '0'),
+                            month: (day.getMonth() + 1) + '月',
+                            weekday: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][day.getDay()],
+                            isToday: date === today
+                        };
+                    });
                 }
             },
             methods: {
@@ -1043,6 +1210,8 @@
                 async openTmdb(item, type = 'movie', sourceGroup = null, updateRoute = true) {
                     const id = Number(item && item.id);
                     if (!id) return false;
+                    if (this.calendarOpen) this.closeCalendar(false);
+                    if (this.personOpen) this.closePerson(false);
                     const nextType = type === 'tv' ? 'tv' : 'movie';
                     const seq = ++this.tmdbRequestSeq;
                     this.tmdbSearchGroup = sourceGroup || null;
@@ -1121,12 +1290,124 @@
                         if (seq === this.tmdbRequestSeq) this.tmdbCollectionParts = [];
                     }
                 },
+                async openPerson(person, updateRoute = true) {
+                    const id = Number(person && person.id);
+                    if (!id) return;
+                    const seq = ++this.personRequestSeq;
+                    const currentRoute = window.location.pathname + window.location.search;
+                    if (!currentRoute.startsWith('/person/')) this.personReturnRoute = currentRoute || '/';
+                    if (updateRoute !== false) setAppRoute('/person/' + id);
+                    this.personOpen = true;
+                    this.personLoading = true;
+                    this.personError = '';
+                    this.personInfo = null;
+                    this.personCredits = [];
+                    document.body.classList.add('tmdb-open');
+                    try {
+                        const res = await fetch(`${TMDB_BASE_URL}/person/${id}?language=zh-CN&append_to_response=combined_credits,external_ids,images&include_image_language=zh,en,ja,null`);
+                        if (!res.ok) throw new Error('TMDb person request failed: ' + res.status);
+                        const data = await res.json();
+                        if (seq !== this.personRequestSeq) return;
+                        data.imdb_id = data.external_ids && data.external_ids.imdb_id || '';
+                        this.personInfo = data;
+                        const credits = data.combined_credits || {};
+                        const seen = new Set();
+                        this.personCredits = [...(credits.cast || []), ...(credits.crew || [])]
+                            .filter(item => item && item.id && item.poster_path && (item.media_type === 'movie' || item.media_type === 'tv'))
+                            .filter(item => {
+                                const key = item.media_type + ':' + item.id;
+                                if (seen.has(key)) return false;
+                                seen.add(key);
+                                return true;
+                            })
+                            .sort((a, b) => Number(b.popularity || 0) - Number(a.popularity || 0))
+                            .slice(0, 24);
+                    } catch (error) {
+                        if (seq === this.personRequestSeq) this.personError = '人物资料加载失败，请稍后再试。';
+                    } finally {
+                        if (seq === this.personRequestSeq) this.personLoading = false;
+                    }
+                },
+                closePerson(updateRoute = true) {
+                    this.personRequestSeq += 1;
+                    this.personOpen = false;
+                    this.personLoading = false;
+                    if (!this.tmdbOpen && !this.calendarOpen) document.body.classList.remove('tmdb-open');
+                    if (updateRoute !== false) {
+                        const route = this.tmdbOpen && this.tmdbInfo
+                            ? `/title/${this.tmdbType}/${this.tmdbInfo.id}`
+                            : (this.personReturnRoute || '/');
+                        setAppRoute(route);
+                    }
+                },
+                openPersonTitle(credit) {
+                    if (!credit || !credit.id) return;
+                    this.closePerson(false);
+                    const type = credit.media_type === 'tv' || (!credit.title && credit.first_air_date) ? 'tv' : 'movie';
+                    this.openTmdb({ id: credit.id }, type);
+                },
+                openCalendar(updateRoute = true) {
+                    if (this.showDetail) this.closeDetail(false);
+                    if (this.personOpen) this.closePerson(false);
+                    if (this.tmdbOpen) this.closeTmdb(false);
+                    const currentRoute = window.location.pathname + window.location.search;
+                    if (!currentRoute.startsWith('/calendar')) this.calendarReturnRoute = currentRoute || '/';
+                    this.calendarOpen = true;
+                    document.body.classList.add('tmdb-open');
+                    if (updateRoute !== false) setAppRoute('/calendar?date=' + this.calendarDate);
+                    this.loadCalendarDay(this.calendarDate);
+                },
+                closeCalendar(updateRoute = true) {
+                    this.calendarRequestSeq += 1;
+                    this.calendarOpen = false;
+                    this.calendarLoading = false;
+                    if (!this.tmdbOpen && !this.personOpen) document.body.classList.remove('tmdb-open');
+                    if (updateRoute !== false) setAppRoute(this.calendarReturnRoute || '/');
+                },
+                selectCalendarDay(date) {
+                    if (!date || date === this.calendarDate) return;
+                    this.calendarDate = date;
+                    setAppRoute('/calendar?date=' + date);
+                    this.loadCalendarDay(date);
+                },
+                async loadCalendarDay(date) {
+                    const value = /^\d{4}-\d{2}-\d{2}$/.test(String(date || '')) ? date : localDateIso();
+                    const seq = ++this.calendarRequestSeq;
+                    this.calendarDate = value;
+                    this.calendarLoading = true;
+                    this.calendarError = '';
+                    this.calendarMovies = [];
+                    this.calendarTv = [];
+                    const parsed = new Date(value + 'T12:00:00');
+                    this.calendarDateLabel = parsed.getFullYear() + '年' + (parsed.getMonth() + 1) + '月' + parsed.getDate() + '日 · '
+                        + ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][parsed.getDay()];
+                    const common = 'language=zh-CN&sort_by=popularity.desc&include_adult=false&page=1';
+                    const load = async (path) => {
+                        const res = await fetch(TMDB_BASE_URL + path);
+                        if (!res.ok) throw new Error('TMDb ' + res.status);
+                        const data = await res.json();
+                        return (data.results || []).filter(item => item && item.id && item.poster_path);
+                    };
+                    try {
+                        const [movies, tv] = await Promise.all([
+                            load(`/discover/movie?${common}&primary_release_date.gte=${value}&primary_release_date.lte=${value}`),
+                            load(`/discover/tv?${common}&first_air_date.gte=${value}&first_air_date.lte=${value}`)
+                        ]);
+                        if (seq !== this.calendarRequestSeq) return;
+                        this.calendarMovies = movies.slice(0, 24);
+                        this.calendarTv = tv.slice(0, 24);
+                    } catch (error) {
+                        if (seq === this.calendarRequestSeq) this.calendarError = '日历加载失败，请稍后再试。';
+                    } finally {
+                        if (seq === this.calendarRequestSeq) this.calendarLoading = false;
+                    }
+                },
                 closeTmdb(updateRoute = true) {
                     this.tmdbRequestSeq += 1;
                     this.tmdbSearchSeq += 1;
                     this.tmdbOpen = false;
                     this.tmdbLoading = false;
-                    document.body.classList.remove('tmdb-open');
+                    if (!this.personOpen && !this.calendarOpen) document.body.classList.remove('tmdb-open');
                     if (updateRoute !== false) setAppRoute(this.tmdbReturnRoute || '/');
                 },
                 changeTmdbRegion() {
@@ -1303,6 +1584,8 @@
                     const path = String(window.location.pathname || '/').replace(/\/+$/, '') || '/';
                     const params = new URLSearchParams(window.location.search);
                     if (path === '/search') {
+                        if (this.personOpen) this.closePerson(false);
+                        if (this.calendarOpen) this.closeCalendar(false);
                         if (this.tmdbOpen) this.closeTmdb(false);
                         if (this.showDetail) this.closeDetail(false);
                         const keyword = (params.get('wd') || '').trim();
@@ -1314,8 +1597,24 @@
                         }
                         return;
                     }
+                    const personMatch = path.match(/^\/person\/(\d+)$/);
+                    if (personMatch) {
+                        if (this.calendarOpen) this.closeCalendar(false);
+                        if (this.showDetail) this.closeDetail(false);
+                        this.openPerson({ id: Number(personMatch[1]) }, false);
+                        return;
+                    }
+                    if (path === '/calendar') {
+                        if (this.showDetail) this.closeDetail(false);
+                        const date = (params.get('date') || '').trim();
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(date)) this.calendarDate = date;
+                        this.openCalendar(false);
+                        return;
+                    }
                     const titleMatch = path.match(/^\/title\/(movie|tv)\/(\d+)$/);
                     if (titleMatch) {
+                        if (this.personOpen) this.closePerson(false);
+                        if (this.calendarOpen) this.closeCalendar(false);
                         if (this.showDetail) this.closeDetail(false);
                         this.openTmdb({ id: Number(titleMatch[2]) }, titleMatch[1], null, false);
                         return;
@@ -1325,6 +1624,8 @@
                         const id = params.get('id');
                         const name = params.get('name') || '影片';
                         if (site && id) {
+                            if (this.personOpen) this.closePerson(false);
+                            if (this.calendarOpen) this.closeCalendar(false);
                             if (this.tmdbOpen) this.closeTmdb(false);
                             this.openDetail({
                                 name,
@@ -1342,6 +1643,8 @@
                         }
                         return;
                     }
+                    if (this.personOpen) this.closePerson(false);
+                    if (this.calendarOpen) this.closeCalendar(false);
                     if (this.tmdbOpen) this.closeTmdb(false);
                     if (this.showDetail) this.closeDetail(false);
                     this.clearSearch(false);

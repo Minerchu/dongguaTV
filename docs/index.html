@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>冬瓜TV 部署与使用教程</title>
-<meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索、TMDb 反代和 Android 原生客户端自动编译教程。">
+<meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索、Cloudflare / Nginx / 宝塔反向代理、TMDb 和 Android 客户端教程。">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="assets/donggua-icon.png" type="image/png">
 <link rel="apple-touch-icon" href="assets/donggua-icon.png">
@@ -27,9 +27,10 @@
             <a href="#sites">四、添加采集站</a>
             <a href="#pansou">五、网盘搜索</a>
             <a href="#android">六、Android 客户端</a>
-            <a href="#tmdb">七、TMDb 功能与反代</a>
-            <a href="#api">八、API 一览</a>
-            <a href="#faq">九、常见问题</a>
+            <a href="#reverse-proxy">七、域名与反向代理</a>
+            <a href="#tmdb">八、TMDb 功能</a>
+            <a href="#api">九、API 一览</a>
+            <a href="#faq">十、常见问题</a>
             <a href="#notice">免责声明</a>
         </nav>
     </aside>
@@ -40,7 +41,7 @@
             <h1>冬瓜TV 部署与使用教程</h1>
             <p>从零开始部署，到后台添加采集站、开启网盘搜索，一步一步来。</p>
             <div class="hero-tags">
-                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>TMDb 同源反代</span><span>Android 原生客户端</span><span>播放代理与自动切源</span><span>健康巡检</span>
+                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>Cloudflare / Nginx / 宝塔</span><span>TMDb 服务端代理</span><span>Android 原生客户端</span><span>播放代理与自动切源</span><span>健康巡检</span>
             </div>
             <div class="note">
                 本页只是静态教程，不运行任何后端。仓库和正式版本里<strong>不包含任何采集站地址</strong>，
@@ -77,15 +78,19 @@
                     <figcaption>手机端详情：竖屏布局、海报缩略图与 Logo，先看资料再找片源</figcaption>
                 </figure>
                 <figure class="preview-card">
-                    <a href="assets/screenshots/admin-sites.jpg?v=20261109b" target="_blank" rel="noopener"><img src="assets/screenshots/admin-sites.jpg?v=20261109b" alt="后台采集站管理" loading="lazy"></a>
-                    <figcaption>后台采集站管理：测试、添加和启停</figcaption>
+                    <a href="assets/screenshots/admin-sites.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-sites.jpg?v=20261109c" alt="后台采集站管理" loading="lazy"></a>
+                    <figcaption>后台采集站管理：Maccms 接口与自定义适配器</figcaption>
                 </figure>
                 <figure class="preview-card">
-                    <a href="assets/screenshots/admin-import.jpg?v=20261109b" target="_blank" rel="noopener"><img src="assets/screenshots/admin-import.jpg?v=20261109b" alt="后台导入 TVBox 配置和苹果CMS接口" loading="lazy"></a>
+                    <a href="assets/screenshots/admin-import.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-import.jpg?v=20261109c" alt="后台导入 TVBox 配置和苹果CMS接口" loading="lazy"></a>
                     <figcaption>导入采集源：TVBox 配置或苹果CMS接口，解析后自动标出已存在</figcaption>
                 </figure>
+                <figure class="preview-card">
+                    <a href="assets/screenshots/admin-android.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-android.jpg?v=20261109c" alt="后台生成 Android 客户端" loading="lazy"></a>
+                    <figcaption>Android 客户端：名称、图标、版本号与扫码绑定二维码</figcaption>
+                </figure>
                 <figure class="preview-card wide">
-                    <a href="assets/screenshots/admin-guide.jpg?v=20261109b" target="_blank" rel="noopener"><img src="assets/screenshots/admin-guide.jpg?v=20261109b" alt="后台使用教程" loading="lazy"></a>
+                    <a href="assets/screenshots/admin-guide.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-guide.jpg?v=20261109c" alt="后台使用教程" loading="lazy"></a>
                     <figcaption>后台内置教程：接口格式、谷歌搜索关键词、验证和排错</figcaption>
                 </figure>
             </div>
@@ -96,6 +101,10 @@
 
             <h3>方式 A：Docker Compose（推荐）</h3>
             <p>会同时启动「主站」和「PanSou 网盘搜索」两个容器，适合绝大多数人。</p>
+            <div class="note">
+                建议部署在能稳定访问 TMDb 的<strong>海外服务器</strong>。国内机器可能打不开 TMDb 的 API 和图片，
+                需要额外代理，首页推荐和海报会不稳定。
+            </div>
 <pre><code>git clone https://github.com/Minerchu/dongguaTV.git
 cd dongguaTV
 # 可选：复制配置模板，改管理员密码、填 TMDB Key
@@ -145,7 +154,7 @@ npm start</code></pre>
             <h3>需要准备的东西</h3>
             <table>
                 <tr><th>项目</th><th>是否必须</th><th>说明</th></tr>
-                <tr><td>TMDb API Key</td><td>必须</td><td>到 TMDb 官网申请；反代已内置，不需要自备域名</td></tr>
+                <tr><td>TMDb API Key</td><td>必须</td><td>到 TMDb 官网申请，由服务端自动转发，不需要自备接口域名</td></tr>
                 <tr><td>采集站接口</td><td>必须</td><td>在后台自行添加，格式见第四节</td></tr>
                 <tr><td>PanSou</td><td>可选</td><td>网盘搜索；compose / all-in-one 已经内置</td></tr>
             </table>
@@ -161,7 +170,7 @@ npm start</code></pre>
 #        容器里的程序仍然监听 3000</code></pre>
 
             <h3>1. 只改访问端口（最常见）</h3>
-            <p>推荐在 <code>.env</code> 里改 <code>HOST_PORT</code>，容器内部端口和内置反代都不用动：</p>
+            <p>推荐在 <code>.env</code> 里改 <code>HOST_PORT</code>，容器内部端口不用动：</p>
 <pre><code>HOST_PORT=8080</code></pre>
 <pre><code>docker compose up -d</code></pre>
             <p>也可以直接改 <code>docker-compose.yml</code> 里冒号左边的数字：</p>
@@ -206,26 +215,9 @@ environment:
             <p>或者临时启动：</p>
 <pre><code>PORT=8080 node server.js</code></pre>
 
-            <h3>5. 自带 Caddy HTTPS（推荐）</h3>
-            <p>项目已经带了一份 Caddy 配置，不用自己写反代。先把域名解析到服务器，然后在 <code>.env</code> 里填：</p>
-<pre><code>DOMAIN=tv.example.com</code></pre>
-            <p>用 HTTPS 配置启动：</p>
-<pre><code>docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build</code></pre>
-            <p>Caddy 会自动申请证书、续期，并转发到容器里的 3000 端口。服务器 80 和 443 要保持可用。</p>
-
-            <h3>6. 用 Nginx 反向代理（可选）</h3>
-            <p>不想用自带 Caddy 时，也可以让 Nginx 转发到 3000：</p>
-<pre><code>server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://127.0.0.1:3000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}</code></pre>
+            <h3>5. 域名和 HTTPS</h3>
+            <p>用域名访问、去掉网址里的端口，需要做反向代理。Cloudflare、Nginx 和宝塔三种方式都在
+            <a href="#reverse-proxy">第七节</a>，按你现有的环境选一种即可。</p>
         </section>
 
         <section id="first-run">
@@ -320,6 +312,27 @@ https://example.com/inc/apijson.php</code></pre>
             <h3>8. 观看记录和收藏</h3>
             <p>浏览记录、收藏和继续观看保存在浏览器本地，不上传服务器，也不需要注册账号。
             清除浏览器数据会一起清掉这些记录。</p>
+
+            <h3>9. 自定义源适配器</h3>
+            <p>
+                内置采集只认 Maccms JSON。自建 JSON、字段名不同或需要特殊请求头的站点，可以用服务端适配器接入。
+                适配器是放在 <code>data/adapters/</code> 里的 <code>.js</code> 文件，不是浏览器插件。
+            </p>
+            <ol>
+                <li>把适配器文件放进宿主机 <code>data/adapters/</code>。</li>
+                <li>后台「采集站管理」点「重载适配器」。</li>
+                <li>添加采集站时选择「自定义适配器」，填写基础地址和 JSON 配置。</li>
+            </ol>
+<pre><code>mkdir -p data/adapters
+cp examples/adapters/generic-json.js data/adapters/
+# 然后回后台点「重载适配器」，不需要重启容器</code></pre>
+            <p>
+                通用示例支持配置 <code>searchPath</code>、<code>queryParam</code>、<code>detailPath</code> 和 <code>testQuery</code>。
+                适配器接口说明见仓库 <code>examples/adapters/README.md</code>。
+            </p>
+            <div class="warn">
+                适配器会在服务器上执行代码，只安装你信任的来源。安装后可以正常参与搜索、详情、健康巡检和播放代理。
+            </div>
         </section>
 
         <section id="pansou">
@@ -386,10 +399,17 @@ PANSOU_URL=http://你的地址:8888</code></pre>
             <h3>服务器地址怎么填</h3>
             <ul>
                 <li>必须是<strong>手机实际能访问的地址</strong>，不要填 <code>127.0.0.1</code>、容器名或容器内部端口。</li>
-                <li>通过 Nginx / Caddy / Cloudflare 反代时，填反代后的域名，例如 <code>https://tv.example.com</code>。</li>
+                <li>已经配置域名和 HTTPS 时，填最终公网地址，例如 <code>https://tv.example.com</code>。</li>
                 <li>局域网测试可以填 <code>http://192.168.1.10:3000</code>，手机和服务器要在同一网络。</li>
                 <li>客户端内置地址不可用时，也可以在客户端「设置」页手动修改服务器地址。</li>
             </ul>
+
+            <h3>扫码绑定</h3>
+            <p>
+                后台 Android 页面会显示服务器二维码。安装 APK 后，在首次连接页或「设置」里点「扫码绑定」，
+                扫码即可写入地址并测试连接，不需要在手机上手动输入。
+            </p>
+            <p>二维码只带服务器地址，不带后台密码。修改服务器地址并保存后，二维码会自动更新。</p>
 
             <h3>更新和签名</h3>
             <pre><code>data/android-client/
@@ -404,10 +424,118 @@ PANSOU_URL=http://你的地址:8888</code></pre>
                 如需排查失败原因，运行 <code>docker compose logs -f dongguatv</code> 查看构建日志。
                 All-in-One 镜像不包含 APK 编译组件；需要 Android 客户端时请使用标准 Dockerfile / Compose。
             </p>
+            <p>
+                客户端「设置」页可以检查站点是否发布了新版本；发现新版本会直接打开 APK 下载地址。
+                播放页右上角可以把当前集交给系统里的其他播放器或投屏应用。
+            </p>
+        </section>
+
+        <section id="reverse-proxy">
+            <h2>七、域名与反向代理</h2>
+            <div class="note">
+                建议把服务部署在能稳定访问 TMDb 的<strong>海外服务器</strong>。中国大陆机器访问 TMDb 可能超时，
+                首页推荐、海报和演员资料会不完整。这和下面的域名反向代理是两件事：前者决定服务器能否访问 TMDb，
+                后者决定用户能否用域名和 HTTPS 打开你的网站。
+            </div>
+
+            <h3>先确定源站地址</h3>
+            <p>默认 Docker 对外端口是 <code>3000</code>，反代目标就是 <code>http://127.0.0.1:3000</code>。
+            如果你在第二节把 <code>HOST_PORT</code> 改成了 <code>3100</code>，下面配置里的 <code>3000</code>
+            也要一起换掉。先在服务器上确认能访问：</p>
+<pre><code>curl -I http://127.0.0.1:3000</code></pre>
+            <p>域名服务商处添加一条 A 记录，指向服务器公网 IP。等解析生效后，从下面三种方案里<strong>只选一种</strong>。</p>
+            <div class="warn">
+                正式环境建议只对外开放 <code>80</code> 和 <code>443</code>，不要长期把
+                <code>3000</code> 直接暴露在公网。反代必须原样转发 <code>/api</code>、<code>/tmdb</code>
+                和 <code>/admin.html</code>，不要加路径前缀，也不要开启静态缓存。
+            </div>
+
+            <h3>方案 A：Cloudflare 反向代理</h3>
+            <p>适合不想手动续证书、希望顺带使用 CDN 和防护的人。注意：Cloudflare 的普通橙色云代理只从
+            <code>80/443</code> 回源，不能直接把橙色云指向服务器的 <code>3000</code>。源站需要先用 Nginx
+            或 Caddy 监听 443，或者改用 Cloudflare Tunnel。</p>
+            <ol>
+                <li>在 Cloudflare 添加域名，DNS 里新建 A 记录，填写服务器 IP，先开启橙色云。</li>
+                <li>如果源站已经有有效证书，SSL/TLS 模式选 <strong>Full (strict)</strong>；
+                源站暂时只有 HTTP 时只能选 Full 或 Flexible，但安全性较差，不推荐长期这样用。</li>
+                <li>在 SSL/TLS → Edge Certificates 打开 <strong>Always Use HTTPS</strong>。</li>
+                <li>源站按下面 Nginx 教程把 <code>443</code> 转发到 <code>3000</code>，或者使用 Tunnel。</li>
+            </ol>
+            <p>不想开放公网端口时，在 Cloudflare Zero Trust → Networks → Tunnels 新建 Tunnel，
+            装好连接器后添加 Public Hostname，Service 填 <code>http://127.0.0.1:3000</code>。
+            临时测试也可以先运行：</p>
+<pre><code>cloudflared tunnel --url http://127.0.0.1:3000</code></pre>
+            <div class="warn">
+                Cloudflare 代理不适合承载很大的视频流量。个人使用一般够用；如果经常播放或流量较大，
+                建议把该域名改成灰云（仅 DNS），让 Nginx 直接承担播放请求和 TLS。
+            </div>
+
+            <h3>方案 B：Nginx 反向代理</h3>
+            <p>Ubuntu / Debian 安装 Nginx 和 Certbot：</p>
+<pre><code>sudo apt update
+sudo apt install -y nginx certbot python3-certbot-nginx</code></pre>
+            <p>新建 <code>/etc/nginx/sites-available/dongguatv</code>，把域名和端口换成自己的：</p>
+<pre><code>server {
+    listen 80;
+    server_name tv.example.com;
+    client_max_body_size 64m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+        proxy_request_buffering off;
+    }
+}</code></pre>
+            <p>启用配置并申请证书：</p>
+<pre><code>sudo ln -s /etc/nginx/sites-available/dongguatv /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d tv.example.com</code></pre>
+            <p>之后访问 <code>https://tv.example.com</code>。如果 Nginx 本身也在 Docker 里，
+            把 <code>127.0.0.1:3000</code> 换成主站容器的服务名，例如 <code>http://dongguatv:3000</code>。</p>
+
+            <h3>方案 C：宝塔面板反向代理</h3>
+            <ol>
+                <li>软件商店确认已安装 Nginx，然后在「网站」→「添加站点」添加域名，PHP 版本选纯静态，不创建数据库。</li>
+                <li>进入站点设置 →「SSL」，申请 Let's Encrypt 证书，开启「强制 HTTPS」。</li>
+                <li>打开「反向代理」→「添加反向代理」，目标 URL 填 <code>http://127.0.0.1:3000</code>，发送域名填 <code>$host</code>。</li>
+                <li>在反向代理配置中开启 WebSocket，关闭缓存，把超时时间设为 <code>3600</code> 秒。</li>
+                <li>保存后访问域名检查首页、后台、搜索和播放。站点目录不需要放任何文件。</li>
+            </ol>
+            <p>如果宝塔生成的配置里没有下面几项，可在反向代理配置中补上；已经存在就不要重复添加：</p>
+<pre><code>proxy_http_version 1.1;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_read_timeout 3600s;
+proxy_send_timeout 3600s;
+proxy_buffering off;</code></pre>
+
+            <h3>反向代理完成后检查</h3>
+            <ul>
+                <li>浏览器地址栏只显示 <code>https://你的域名</code>，不再带 <code>:3000</code>。</li>
+                <li>后台能登录，搜索、详情和播放都正常；如果登录后反复跳回登录页，检查 <code>X-Forwarded-Proto</code>。</li>
+                <li>播放中断时，优先检查 <code>proxy_buffering off</code> 和两个 <code>3600s</code> 超时。</li>
+                <li>后台生成 Android 客户端时，服务器地址必须填最终域名，例如 <code>https://tv.example.com</code>，不能填 <code>127.0.0.1</code>。</li>
+            </ul>
+            <div class="note">
+                项目还附带可选的 Caddy 配置。如果不想安装 Nginx，可以在 <code>.env</code> 填
+                <code>DOMAIN=tv.example.com</code>，再执行
+                <code>docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build</code>。
+                这种方式占用 <code>80/443</code>，不能和宝塔/Nginx 同时监听同一端口。
+            </div>
         </section>
 
         <section id="tmdb">
-            <h2>七、TMDb 功能与反代（默认零配置）</h2>
+            <h2>八、TMDb 功能</h2>
             <h3>首页和详情页已经用到的功能</h3>
             <ul>
                 <li><strong>首页推荐</strong>：本周趋势、华语剧集、日韩剧集、港台电影、正在热映、高分电影、今日播出。</li>
@@ -422,21 +550,21 @@ PANSOU_URL=http://你的地址:8888</code></pre>
                 TMDb 只提供影视资料、图片和推荐，不存储影视文件。实际播放仍来自你在后台添加的采集站。
             </div>
 
-            <p>前端不会再请求任何人的私人域名。服务端内置了 <code>/tmdb</code> 同源代理：</p>
+            <p>TMDb 请求由本站服务端转发，浏览器只访问当前站点域名，API Key 不会进入前端：</p>
             <ul>
                 <li>前端 <code>/tmdb/3/...</code> → <code>https://api.themoviedb.org/3/...</code></li>
                 <li>海报 <code>/tmdb/t/p/...</code> → <code>https://image.tmdb.org/t/p/...</code></li>
                 <li><code>TMDB_API_KEY</code> 只保存在服务端，不会出现在网页源码里</li>
             </ul>
             <div class="note">
-                Docker Compose 和 All-in-One 已经集成好了，<strong>不需要买域名、搭 Cloudflare Worker 或额外反代服务</strong>。
-                只需要在 <code>.env</code> 里填 <code>TMDB_API_KEY</code>。
+                这里说的内置代理只负责把 TMDb API 和图片请求转发出去，<strong>不等于给网站配置公网域名和 HTTPS</strong>。
+                用户访问你的网站仍需要按上一节配置 Cloudflare、Nginx 或宝塔。
             </div>
-            <p>请求链路就在同一个端口，不需要额外的 IP、端口或反代容器：</p>
-<pre><code>浏览器 → http://服务器IP:3000/tmdb/... → 容器内 server.js → TMDb</code></pre>
-            <p>默认<strong>不要填</strong> <code>HTTPS_PROXY</code>、<code>TMDB_API_BASE</code>、<code>TMDB_IMAGE_BASE</code>。</p>
-            <p>主域名超时或返回 5xx 时会自动切换备用域名，用户无需处理。修改 Docker 对外端口（例如
-            <code>8080:3000</code>）也不会影响反代，因为前端始终请求当前访问地址下的 <code>/tmdb/...</code>。</p>
+            <p>请求链路：</p>
+<pre><code>浏览器 → https://你的域名/tmdb/... → 容器内 server.js → TMDb</code></pre>
+            <p>默认<strong>不需要填</strong> <code>HTTPS_PROXY</code>、<code>TMDB_API_BASE</code> 或
+            <code>TMDB_IMAGE_BASE</code>。主域名超时或返回 5xx 时会自动切换备用域名。修改 Docker
+            对外端口也不会影响它，因为前端始终请求当前网站地址下的 <code>/tmdb/...</code>。</p>
 
             <h3>只有服务器访问不了 TMDb 时</h3>
             <p>在 <code>.env</code> 里填写代理：</p>
@@ -444,11 +572,11 @@ PANSOU_URL=http://你的地址:8888</code></pre>
 HTTP_PROXY=http://host.docker.internal:7890</code></pre>
             <p><code>host.docker.internal</code> 指向宿主机，Compose 已经配置好映射。</p>
             <p>All-in-One 则直接把同样的变量写成 <code>-e HTTPS_PROXY=...</code>。</p>
-            <p>只要宿主机能访问 TMDb，容器就能直接使用，不需要再搭建任何外部反代。</p>
+            <p>这层代理只解决服务器访问 TMDb 的问题；网站本身的域名和 HTTPS 仍按第七节配置。</p>
         </section>
 
         <section id="api">
-            <h2>八、API 一览</h2>
+            <h2>九、API 一览</h2>
             <p>这些是本项目自己的接口，供前端或二次开发使用：</p>
 <pre><code>GET  /api/config                     # 前台配置
 GET  /api/search?wd=关键词            # 聚合搜索，返回 list 和 groups（按片名/年份合并）
@@ -473,6 +601,8 @@ PUT    /api/admin/sites/:key
 DELETE /api/admin/sites/:key
 POST   /api/admin/sites/test
 POST   /api/admin/sites/import
+GET    /api/admin/adapters
+POST   /api/admin/adapters/reload
 POST   /api/admin/health/check
 GET    /api/admin/health
 GET    /api/admin/backup
@@ -483,6 +613,7 @@ POST   /api/admin/restore
 PUT    /api/admin/settings
 POST   /api/admin/pansou/test
 GET    /api/admin/client
+GET    /api/admin/client/qr.png
 PUT    /api/admin/client
 POST   /api/admin/client/build
 POST   /api/admin/client/icon
@@ -490,7 +621,7 @@ DELETE /api/admin/client/icon</code></pre>
         </section>
 
         <section id="faq">
-            <h2>九、常见问题</h2>
+            <h2>十、常见问题</h2>
             <details>
                 <summary>启动后搜索没有任何结果？</summary>
                 <p>先确认后台已经添加了采集站并且处于「启用」状态。新安装默认是空的。</p>
@@ -498,6 +629,10 @@ DELETE /api/admin/client/icon</code></pre>
             <details>
                 <summary>添加时提示「不是 Maccms JSON 接口」？</summary>
                 <p>说明地址不是 JSON 采集接口。检查是不是少了 <code>/api.php/provide/vod</code>，或者返回的是网页/XML。</p>
+            </details>
+            <details>
+                <summary>非 Maccms 的站点怎么接入？</summary>
+                <p>把适配器文件放进 <code>data/adapters/</code>，后台重载后选择「自定义适配器」。仓库的 <code>examples/adapters/</code> 有完整示例。</p>
             </details>
             <details>
                 <summary>搜索很慢？</summary>
@@ -514,8 +649,8 @@ DELETE /api/admin/client/icon</code></pre>
             <details>
                 <summary>TMDb 首页没有内容？</summary>
                 <p>确认 <code>.env</code> 里填了 <code>TMDB_API_KEY</code>。如果服务器访问不了 TMDb，
-                配置 <code>HTTPS_PROXY</code>，或把 <code>TMDB_API_BASE</code> / <code>TMDB_IMAGE_BASE</code>
-                换成你自己的反代地址。</p>
+                优先换到海外服务器，或配置 <code>HTTPS_PROXY</code>；也可以把
+                <code>TMDB_API_BASE</code> / <code>TMDB_IMAGE_BASE</code> 换成你自己的代理地址。</p>
             </details>
             <details>
                 <summary>更新版本后站点数据会丢吗？</summary>

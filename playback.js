@@ -123,9 +123,10 @@ function upstreamHeaders(site, range) {
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         'Accept-Encoding': 'identity'
     };
-    if (site && site.api) {
+    const originSource = site && (site.api || site.baseUrl);
+    if (originSource) {
         try {
-            const siteUrl = new URL(site.api);
+            const siteUrl = new URL(originSource);
             headers.Referer = siteUrl.origin + '/';
             headers.Origin = siteUrl.origin;
         } catch (error) { }

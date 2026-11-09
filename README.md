@@ -16,7 +16,9 @@
 - 采集站每 10 分钟自动巡检，连续失败先冷却，恢复后自动重新参与搜索。
 - 浏览记录、收藏和继续观看保存在浏览器本地，不需要账号。
 - 后台支持备份/恢复，每天自动备份，保留最近 7 份。
-- 自带可选 Caddy HTTPS 配置；另有公开状态页 `/status`，不暴露采集站地址。
+- 支持服务端自定义源适配器，非 Maccms 的 JSON/HTML 站点也能接入后台，并参与搜索、详情、巡检和播放代理。
+- Android 客户端支持扫码绑定服务器、检查更新，以及调用系统播放器或投屏应用。
+- 公开状态页 `/status`，不暴露采集站地址。
 
 - 教程：https://minerchu.github.io/dongguaTV/
 - 后台：`http://服务器IP:3000/admin.html`
@@ -44,6 +46,8 @@ docker compose up -d --build
 
 默认会同时启动 PanSou，地址为 `http://pansou:8888`，不需要在公网开放 8888。
 
+正式使用建议选一台能稳定访问 TMDb 的海外服务器；域名和 HTTPS 配置见[教程](https://minerchu.github.io/dongguaTV/#reverse-proxy)。
+
 不想用 Compose 时，可以构建单容器版本：
 
 ```bash
@@ -65,10 +69,15 @@ All-in-One 不包含 APK 编译组件。需要后台生成 Android 客户端时�
 2. 打开「Android 客户端」，填写应用名称和手机能访问的服务器地址。
 3. 可选上传 512×512 PNG 图标，修改版本号和版本名称。
 4. 保存后等待生成完成，在后台或首页下载 APK。
+5. 客户端首次打开可点「扫码连接服务器」，扫描后台 Android 页面的二维码，不用手输地址。
+
+![后台生成 Android 客户端](docs/assets/screenshots/admin-android.jpg?v=20261109c)
 
 标准 Docker 镜像已经包含 Android SDK、Gradle、apktool 和签名工具。第一次构建镜像会下载依赖，耗时较长；后续修改客户端配置只会重新打包 APK，通常几十秒完成。
 
 签名保存在 `data/android-client/`。升级服务时请保留整个 `data/`，否则手机可能无法覆盖安装。
+
+客户端设置页可以检查站点是否生成了新版本；发现新版本会直接打开下载地址。播放页右上角可以把当前集交给系统里的其他播放器或投屏应用。
 
 ## 采集站
 
@@ -103,6 +112,34 @@ https://example.com/inc/apijson.php
 预览表里会直接标出「新接口」和「已存在」，已存在的不能重复导入。TVBox 里的 `csp_` 内置源、Jar 源需要播放器自己运行，网页后台用不了，会自动跳过并显示原因。
 
 站点配置保存在 `data/db.json`，不会提交到 Git。
+
+## 自定义适配器
+
+内置采集只支持 Maccms JSON。遇到自建 JSON、非标准 JSON 或需要自己拼接请求头的站点，可以写一个服务端适配器。
+
+1. 把 `.js` 文件放进 `data/adapters/`。
+2. 打开后台「采集站管理」→「重载适配器」。
+3. 添加采集站时切到「自定义适配器」，选择适配器、填写基础地址和 JSON 配置。
+
+仓库里有一个通用示例：
+
+```bash
+mkdir -p data/adapters
+cp examples/adapters/generic-json.js data/adapters/
+```
+
+然后点「重载适配器」。示例支持配置：
+
+```json
+{
+  "searchPath": "/api/search",
+  "queryParam": "q",
+  "detailPath": "/api/detail/{id}",
+  "testQuery": "测试"
+}
+```
+
+适配器接口和完整示例见 [examples/adapters/README.md](examples/adapters/README.md)。适配器会在服务端执行，只安装你信任的代码。
 
 ## 配置
 
@@ -145,25 +182,9 @@ docker compose up -d
 
 容器内部仍使用 3000。
 
-## 自带 HTTPS
+## TMDb 接口
 
-项目里已经放好 Caddy 配置，不需要自己写 Nginx 反代。先把域名解析到服务器，然后在 `.env` 填写：
-
-```env
-DOMAIN=tv.example.com
-```
-
-启动：
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
-```
-
-Caddy 会自动申请和续期证书，并把请求转发到 `dongguatv:3000`。服务器的 80、443 端口要保持可用；如果 80 端口已经被别的服务占用，先停掉那个服务。
-
-只用 IP + 端口访问时，继续用默认的 `docker compose up -d` 即可，不需要设置 `DOMAIN`。
-
-TMDb 已经走本站 `/tmdb` 代理，不需要额外搭建反代。前端不会拿到 API Key。服务器无法访问 TMDb 时，可以设置 `HTTPS_PROXY`，或修改 `TMDB_API_BASE` 和 `TMDB_IMAGE_BASE`。
+TMDb 由本站的 `/tmdb` 服务端代理，API Key 不会下发到浏览器。服务器访问不了 TMDb 时，优先换到海外服务器，或设置 `HTTPS_PROXY`。
 
 ## 数据
 
@@ -218,6 +239,8 @@ POST   /api/admin/sites/test
 POST   /api/admin/sites/import
 POST   /api/admin/import/preview
 POST   /api/admin/import/sites
+GET    /api/admin/adapters
+POST   /api/admin/adapters/reload
 POST   /api/admin/health/check
 GET    /api/admin/health
 GET    /api/admin/backup
@@ -229,6 +252,7 @@ POST   /api/admin/restore
 PUT    /api/admin/settings
 POST   /api/admin/pansou/test
 GET    /api/admin/client
+GET    /api/admin/client/qr.png
 PUT    /api/admin/client
 POST   /api/admin/client/build
 POST   /api/admin/client/icon

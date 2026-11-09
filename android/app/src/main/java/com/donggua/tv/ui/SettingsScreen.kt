@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.donggua.tv.AppPrefs
+import com.donggua.tv.AndroidRelease
 import com.donggua.tv.DongguaApi
 import com.donggua.tv.ServerConfig
 import kotlinx.coroutines.launch
@@ -52,6 +54,35 @@ fun SettingsScreen(
     var config by remember { mutableStateOf<ServerConfig?>(null) }
     var message by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
+    var latestRelease by remember { mutableStateOf<AndroidRelease?>(null) }
+    var updateMessage by remember { mutableStateOf("") }
+    var checkingUpdate by remember { mutableStateOf(false) }
+
+    fun checkForUpdate() {
+        scope.launch {
+            checkingUpdate = true
+            updateMessage = ""
+            runCatching { api.config() }
+                .onSuccess { current ->
+                    config = current
+                    val release = current.android
+                    if (release == null || !release.available) {
+                        latestRelease = null
+                        updateMessage = "站长还没有生成可用的 Android 安装包"
+                    } else if (release.versionCode > prefs.bundledVersionCode) {
+                        latestRelease = release
+                        updateMessage = "发现新版本 v${release.version.ifBlank { release.versionCode.toString() }}"
+                    } else {
+                        latestRelease = null
+                        updateMessage = "已是最新版本"
+                    }
+                }
+                .onFailure { updateMessage = it.message ?: "检查更新失败" }
+            checkingUpdate = false
+        }
+    }
+
+    LaunchedEffect(Unit) { checkForUpdate() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(title = "设置", onBack = onBack)
@@ -75,6 +106,24 @@ fun SettingsScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
+                    ScanServerButton(
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        label = "扫码更换服务器"
+                    ) { scanned ->
+                        serverUrl = scanned
+                        error = ""
+                        message = ""
+                        scope.launch {
+                            testing = true
+                            runCatching { api.probe(scanned) }
+                                .onSuccess {
+                                    onServerChanged(normalize(scanned))
+                                    Toast.makeText(context, "已通过二维码连接服务器", Toast.LENGTH_SHORT).show()
+                                }
+                                .onFailure { error = it.message ?: "二维码里的服务器无法连接" }
+                            testing = false
+                        }
+                    }
                     if (error.isNotBlank()) {
                         Text(error, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
                     }
@@ -145,11 +194,42 @@ fun SettingsScreen(
                     Spacer(Modifier.height(8.dp))
                     InfoRow("应用", appName)
                     InfoRow("客户端版本", prefs.bundledVersionName)
+                    InfoRow("客户端版本号", prefs.bundledVersionCode.toString())
                     config?.let {
                         InfoRow("采集站", "${it.siteCount} 个")
                         InfoRow("网盘搜索", if (it.cloudEnabled) "已开启" else "未开启")
                         it.android?.let { release ->
                             InfoRow("站点客户端", "v${release.version.ifBlank { "1.0.0" }}")
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = { checkForUpdate() },
+                        enabled = !checkingUpdate,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        if (checkingUpdate) {
+                            CircularProgressIndicator(modifier = Modifier.height(16.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("检查客户端更新")
+                        }
+                    }
+                    if (updateMessage.isNotBlank()) {
+                        Text(
+                            updateMessage,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    latestRelease?.let { release ->
+                        Button(
+                            onClick = { openExternal(context, release.downloadUrl) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            shape = RoundedCornerShape(50)
+                        ) {
+                            Text("下载并安装 v${release.version.ifBlank { release.versionCode.toString() }}")
                         }
                     }
                     Spacer(Modifier.height(10.dp))

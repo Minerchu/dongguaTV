@@ -14,6 +14,8 @@ const aggregate = require('./aggregate');
 const health = require('./health');
 const playback = require('./playback');
 const backup = require('./backup');
+const { createAdapterRegistry } = require('./adapters');
+const QRCode = require('qrcode');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -28,6 +30,9 @@ const APP_ICON_FILE = path.join(CLIENT_DIR, 'icon.png');
 const BACKUP_DIR = process.env.BACKUP_DIR
     ? path.resolve(process.env.BACKUP_DIR)
     : path.join(DATA_DIR, 'backups');
+const ADAPTER_DIR = process.env.ADAPTER_DIR
+    ? path.resolve(process.env.ADAPTER_DIR)
+    : path.join(DATA_DIR, 'adapters');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
 const TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT) || 5000;
@@ -41,6 +46,7 @@ const TMDB_TIMEOUT = Number(process.env.TMDB_TIMEOUT) || 15000;
 const TMDB_LANGUAGE = process.env.TMDB_LANGUAGE || 'zh-CN';
 const SEARCH_CACHE_TTL = 60 * 1000;
 const SESSION_TTL = 24 * 60 * 60 * 1000;
+const adapterRegistry = createAdapterRegistry({ dir: ADAPTER_DIR, timeout: SEARCH_TIMEOUT });
 
 app.disable('x-powered-by');
 app.set('trust proxy', true);
@@ -95,23 +101,38 @@ function sanitizeRestoredDatabase(input) {
         throw new Error('备份文件里没有 sites 数组');
     }
     const sites = [];
-    const apis = new Set();
+    const identities = new Set();
     const keys = new Set();
     for (const raw of input.sites.slice(0, 500)) {
         if (!raw || typeof raw !== 'object') continue;
-        let api;
-        try { api = normalizeApi(raw.api); } catch (error) { continue; }
-        if (apis.has(api)) continue;
+        let api = '';
+        let adapter = '';
+        let baseUrl = '';
+        let adapterConfig = {};
+        if (raw.adapter) {
+            adapter = cleanText(raw.adapter, 60);
+            if (!adapterRegistry.get(adapter)) continue;
+            try {
+                baseUrl = raw.baseUrl ? normalizeBaseUrl(raw.baseUrl) : '';
+                adapterConfig = normalizeAdapterConfig(raw.adapterConfig);
+            } catch (error) { continue; }
+        } else {
+            try { api = normalizeApi(raw.api); } catch (error) { continue; }
+        }
+        const identity = comparableSite({ api, adapter, baseUrl, adapterConfig });
+        if (!identity || identities.has(identity)) continue;
         let key = cleanText(raw.key, 40);
-        if (!validKey(key) || keys.has(key)) key = makeKey(api, keys);
+        if (!validKey(key) || keys.has(key)) key = makeKey(api || baseUrl || adapter, keys);
         keys.add(key);
-        apis.add(api);
-        sites.push({
+        identities.add(identity);
+        const site = {
             key,
-            name: cleanText(raw.name, 40) || siteHost(api),
-            api,
+            name: cleanText(raw.name, 40) || siteHost(api || baseUrl || adapter),
             active: raw.active !== false
-        });
+        };
+        if (adapter) Object.assign(site, { adapter, baseUrl, adapterConfig });
+        else site.api = api;
+        sites.push(site);
     }
     const settings = normalizeSettings(input.settings);
     if (settings.client && settings.client.buildStatus === 'building') {
@@ -184,6 +205,7 @@ function publicAndroidState() {
         available,
         name: client.appName,
         version: client.versionName,
+        versionCode: Number(client.versionCode) || 1,
         size: client.apkSize,
         builtAt: client.builtAt,
         downloadUrl: available ? '/api/app/download' : ''
@@ -312,14 +334,45 @@ function normalizeApi(raw) {
     if (!/\.php$/i.test(u) && !/provide\/vod/i.test(u)) u += '/api.php/provide/vod';
     return u;
 }
+function normalizeBaseUrl(raw) {
+    let value = cleanText(raw, 500).replace(/\/+$/, '');
+    if (!value) return '';
+    if (!/^https?:\/\//i.test(value)) value = 'https://' + value;
+    let parsed;
+    try { parsed = new URL(value); } catch (e) { throw new Error('基础地址格式不正确'); }
+    if (!parsed.hostname) throw new Error('基础地址缺少域名');
+    parsed.hash = '';
+    parsed.search = '';
+    return parsed.toString().replace(/\/+$/, '');
+}
+function normalizeAdapterConfig(raw) {
+    let value = raw;
+    if (typeof value === 'string') {
+        value = value.trim() ? JSON.parse(value) : {};
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) value = {};
+    const text = JSON.stringify(value);
+    if (Buffer.byteLength(text, 'utf8') > 50000) throw new Error('适配器配置不能超过 50KB');
+    return JSON.parse(text);
+}
 function comparableApi(raw) {
     const tvboxApi = tvbox.normalizeTvboxApi(raw);
     if (tvboxApi) return tvboxApi;
     try { return normalizeApi(raw); } catch (e) { return ''; }
 }
+function comparableSite(site) {
+    const value = site || {};
+    if (value.adapter) {
+        try {
+            return 'adapter:' + cleanText(value.adapter, 60) + '|' + normalizeBaseUrl(value.baseUrl || '') + '|'
+                + JSON.stringify(normalizeAdapterConfig(value.adapterConfig));
+        } catch (e) { return ''; }
+    }
+    return comparableApi(value.api);
+}
 function existingApiSet(db) {
     const sites = db && Array.isArray(db.sites) ? db.sites : [];
-    return new Set(sites.map(site => comparableApi(site && site.api)).filter(Boolean));
+    return new Set(sites.map(site => comparableSite(site)).filter(Boolean));
 }
 function siteHost(api) {
     try { return new URL(api).hostname.replace(/^www\./, ''); } catch (e) { return 'site'; }
@@ -424,9 +477,18 @@ function recordFailure(ip) {
 }
 
 // ========== 采集站检查 ==========
-async function testApi(api) {
+async function testApi(input) {
+    const site = input && typeof input === 'object' ? input : { api: input };
     const started = Date.now();
-    const url = withQuery(api, 'ac=list&pg=1');
+    if (site.adapter) {
+        try {
+            const result = await adapterRegistry.test(site.adapter, site);
+            return Object.assign({ latency: Date.now() - started }, result || { ok: true });
+        } catch (e) {
+            return { ok: false, latency: Date.now() - started, message: e.message || '适配器检查失败' };
+        }
+    }
+    const url = withQuery(site.api, 'ac=list&pg=1');
     try {
         const resp = await axios.get(url, {
             timeout: TEST_TIMEOUT,
@@ -461,7 +523,7 @@ function invalidateCatalogCache() {
 }
 
 function activeSites() {
-    return getDB().sites.filter(site => site.active !== false && site.api);
+    return getDB().sites.filter(site => site.active !== false && (site.api || site.adapter));
 }
 
 function searchableSites() {
@@ -631,7 +693,7 @@ app.get('/tmdb/t/p/*', async (req, res) => {
 // ========== 公共 API ==========
 app.get('/api/config', (req, res) => {
     const db = getDB();
-    const active = db.sites.filter(s => s.active !== false);
+    const active = activeSites();
     res.json({
         cloudEnabled: Boolean(pansouBase()) && db.settings.pansouEnabled !== false,
         siteCount: active.length,
@@ -673,6 +735,14 @@ app.get('/api/check', async (req, res) => {
     if (!site) return res.json({ latency: 9999, ok: false });
     const started = Date.now();
     try {
+        if (site.adapter) {
+            const result = await adapterRegistry.test(site.adapter, site);
+            const latency = Date.now() - started;
+            const ok = Boolean(result && result.ok !== false);
+            if (ok) healthMonitor.recordSuccess(key, latency);
+            else healthMonitor.recordFailure(key, result && result.message);
+            return res.json(Object.assign({ latency: ok ? latency : 9999, ok }, result || {}));
+        }
         const resp = await axios.get(withQuery(site.api, 'ac=list&pg=1'), { timeout: 3000, validateStatus: () => true });
         const latency = Date.now() - started;
         const ok = Boolean(parseMaccmsList(resp.data));
@@ -688,7 +758,7 @@ app.get('/api/check', async (req, res) => {
 app.get('/api/hot', async (req, res) => {
     const cached = cacheGet(hotCache, 'hot');
     if (cached) return res.json(cached);
-    const sites = searchableSites().sites.slice(0, 8);
+    const sites = searchableSites().sites.filter(site => site.api).slice(0, 8);
     for (const site of sites) {
         const started = Date.now();
         try {
@@ -724,6 +794,15 @@ app.get('/api/search', async (req, res) => {
     const chunks = await mapLimit(sites, 8, async (site) => {
         const started = Date.now();
         try {
+            if (site.adapter) {
+                const list = await adapterRegistry.search(site.adapter, site, wd);
+                healthMonitor.recordSuccess(site.key, Date.now() - started);
+                return list.map(item => Object.assign({}, item, {
+                    site_key: site.key,
+                    site_name: site.name,
+                    latency: Date.now() - started
+                }));
+            }
             const response = await axios.get(withQuery(site.api, 'ac=list&wd=' + encodeURIComponent(wd) + '&out=json'), {
                 timeout: SEARCH_TIMEOUT,
                 responseType: 'json',
@@ -769,6 +848,11 @@ app.get('/api/detail', async (req, res) => {
     if (!targetSite) return res.status(404).json({ error: 'Site not found' });
     const started = Date.now();
     try {
+        if (targetSite.adapter) {
+            const data = await adapterRegistry.detail(targetSite.adapter, targetSite, id);
+            healthMonitor.recordSuccess(siteKey, Date.now() - started);
+            return res.json(data);
+        }
         const response = await axios.get(withQuery(targetSite.api, 'ac=detail&ids=' + encodeURIComponent(id) + '&out=json'), { timeout: 8000 });
         healthMonitor.recordSuccess(siteKey, Date.now() - started);
         res.json(response.data);
@@ -836,7 +920,7 @@ app.get('/api/play/proxy', async (req, res) => {
 
 app.get('/api/status', (req, res) => {
     const db = getDB();
-    const active = db.sites.filter(site => site.active !== false && site.api);
+    const active = db.sites.filter(site => site.active !== false && (site.api || site.adapter));
     const healthy = active.filter(site => {
         const state = healthMonitor.snapshot(site.key);
         return state.ok === true && !state.cooling;
@@ -863,7 +947,8 @@ app.get('/api/status', (req, res) => {
         },
         android: {
             available: publicAndroidState().available,
-            version: publicAndroidState().version
+            version: publicAndroidState().version,
+            versionCode: publicAndroidState().versionCode
         }
     });
 });
@@ -956,6 +1041,27 @@ app.get('/api/admin/client', requireAdmin, (req, res) => {
     res.json({ success: true, client: adminClientState() });
 });
 
+app.get('/api/admin/client/qr.png', requireAdmin, async (req, res) => {
+    try {
+        const saved = getDB().settings.client.serverUrl;
+        const serverUrl = normalizeClientServerUrl(req.query.url || saved);
+        if (!serverUrl) return res.status(400).json({ success: false, error: '请先填写服务器地址' });
+        const target = 'dongguatv://connect?url=' + encodeURIComponent(serverUrl);
+        const buffer = await QRCode.toBuffer(target, {
+            type: 'png',
+            width: 360,
+            margin: 2,
+            errorCorrectionLevel: 'M',
+            color: { dark: '#111111', light: '#ffffff' }
+        });
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(buffer);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message || '二维码生成失败' });
+    }
+});
+
 app.put('/api/admin/client', requireAdmin, (req, res) => {
     const body = req.body || {};
     const db = getDB();
@@ -1013,23 +1119,40 @@ app.delete('/api/admin/client/icon', requireAdmin, (req, res) => {
 app.post('/api/admin/sites', requireAdmin, async (req, res) => {
     const db = getDB();
     const name = cleanText(req.body.name, 40);
-    let api;
-    try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
     if (!name) return res.status(400).json({ success: false, error: '请填写站点名称' });
-    if (db.sites.some(s => s.api === api)) return res.status(409).json({ success: false, error: '该 API 地址已存在' });
+    let api = '';
+    let adapter = '';
+    let baseUrl = '';
+    let adapterConfig = {};
+    if (req.body.adapter) {
+        adapter = cleanText(req.body.adapter, 60);
+        if (!adapterRegistry.get(adapter)) return res.status(400).json({ success: false, error: '适配器不存在，请先安装并重载' });
+        try {
+            baseUrl = req.body.baseUrl ? normalizeBaseUrl(req.body.baseUrl) : '';
+            adapterConfig = normalizeAdapterConfig(req.body.adapterConfig);
+        } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+    } else {
+        try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+    }
+    const identity = comparableSite({ api, adapter, baseUrl, adapterConfig });
+    if (!identity || db.sites.some(s => comparableSite(s) === identity)) {
+        return res.status(409).json({ success: false, error: '该采集源已存在' });
+    }
     let key = cleanText(req.body.key, 40);
     if (key) {
         if (!validKey(key)) return res.status(400).json({ success: false, error: '标识只能包含字母、数字、下划线和中划线' });
         if (db.sites.some(s => s.key === key)) return res.status(409).json({ success: false, error: '标识已被占用' });
     } else {
-        key = makeKey(api, new Set(db.sites.map(s => s.key)));
+        key = makeKey(api || baseUrl || adapter, new Set(db.sites.map(s => s.key)));
     }
-    const site = { key, name, api, active: req.body.active !== false };
+    const site = { key, name, active: req.body.active !== false };
+    if (adapter) Object.assign(site, { adapter, baseUrl, adapterConfig });
+    else site.api = api;
     let test = null;
     if (req.body.test !== false) {
-        test = await testApi(api);
+        test = await testApi(site);
         if (!test.ok) {
-            return res.status(400).json({ success: false, error: '连接失败：' + (test.message || '无法访问该接口'), test });
+            return res.status(400).json({ success: false, error: '连接失败：' + (test.message || '无法访问该采集源'), test });
         }
     }
     db.sites.push(site);
@@ -1043,20 +1166,40 @@ app.put('/api/admin/sites/:key', requireAdmin, async (req, res) => {
     const key = cleanText(req.params.key, 40);
     const site = db.sites.find(s => s.key === key);
     if (!site) return res.status(404).json({ success: false, error: '站点不存在' });
-    if (req.body.name !== undefined) site.name = cleanText(req.body.name, 40);
-    if (req.body.active !== undefined) site.active = Boolean(req.body.active);
-    if (req.body.api !== undefined) {
-        let api;
-        try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
-        if (db.sites.some(s => s.key !== key && s.api === api)) return res.status(409).json({ success: false, error: '该 API 地址已存在' });
-        site.api = api;
+    const next = Object.assign({}, site);
+    if (req.body.name !== undefined) next.name = cleanText(req.body.name, 40);
+    if (req.body.active !== undefined) next.active = Boolean(req.body.active);
+    if (req.body.adapter !== undefined || req.body.api !== undefined) {
+        const adapter = cleanText(req.body.adapter, 60);
+        if (adapter) {
+            if (!adapterRegistry.get(adapter)) return res.status(400).json({ success: false, error: '适配器不存在，请先安装并重载' });
+            try {
+                next.adapter = adapter;
+                next.baseUrl = req.body.baseUrl ? normalizeBaseUrl(req.body.baseUrl) : '';
+                next.adapterConfig = normalizeAdapterConfig(req.body.adapterConfig);
+            } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+            delete next.api;
+        } else {
+            let api;
+            try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+            next.api = api;
+            delete next.adapter;
+            delete next.baseUrl;
+            delete next.adapterConfig;
+        }
+        const identity = comparableSite(next);
+        if (!identity || db.sites.some(s => s.key !== key && comparableSite(s) === identity)) {
+            return res.status(409).json({ success: false, error: '该采集源已存在' });
+        }
     }
     if (req.body.key !== undefined && req.body.key !== key) {
         const newKey = cleanText(req.body.key, 40);
         if (!validKey(newKey)) return res.status(400).json({ success: false, error: '标识格式不正确' });
         if (db.sites.some(s => s.key === newKey)) return res.status(409).json({ success: false, error: '标识已被占用' });
-        site.key = newKey;
+        next.key = newKey;
     }
+    Object.keys(site).forEach(prop => delete site[prop]);
+    Object.assign(site, next);
     saveDB(db);
     invalidateCatalogCache();
     res.json({ success: true, site });
@@ -1073,11 +1216,48 @@ app.delete('/api/admin/sites/:key', requireAdmin, (req, res) => {
     res.json({ success: true });
 });
 
+app.get('/api/admin/adapters', requireAdmin, (req, res) => {
+    res.json({
+        success: true,
+        adapters: adapterRegistry.list(),
+        loadedAt: adapterRegistry.loadedAt,
+        lastError: adapterRegistry.lastError
+    });
+});
+
+app.post('/api/admin/adapters/reload', requireAdmin, (req, res) => {
+    res.json({
+        success: true,
+        adapters: adapterRegistry.load(),
+        loadedAt: adapterRegistry.loadedAt,
+        lastError: adapterRegistry.lastError
+    });
+});
+
 app.post('/api/admin/sites/test', requireAdmin, async (req, res) => {
-    let api;
-    try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
-    const result = await testApi(api);
-    res.json({ success: result.ok, api, ...result });
+    let site;
+    if (req.body.key) {
+        site = getDB().sites.find(item => item.key === cleanText(req.body.key, 60));
+        if (!site) return res.status(404).json({ success: false, error: '采集源不存在' });
+    } else if (req.body.adapter) {
+        const adapter = cleanText(req.body.adapter, 60);
+        if (!adapterRegistry.get(adapter)) return res.status(400).json({ success: false, error: '适配器不存在' });
+        try {
+            site = {
+                key: 'adapter-test',
+                name: '适配器测试',
+                adapter,
+                baseUrl: req.body.baseUrl ? normalizeBaseUrl(req.body.baseUrl) : '',
+                adapterConfig: normalizeAdapterConfig(req.body.adapterConfig)
+            };
+        } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+    } else {
+        let api;
+        try { api = normalizeApi(req.body.api); } catch (e) { return res.status(400).json({ success: false, error: e.message }); }
+        site = { key: 'api-test', name: '接口测试', api };
+    }
+    const result = await testApi(site);
+    res.json({ success: result.ok, api: site.api || '', adapter: site.adapter || '', ...result });
 });
 
 app.post('/api/admin/sites/import', requireAdmin, async (req, res) => {
@@ -1258,7 +1438,7 @@ app.post('/api/admin/restore', requireAdmin, (req, res) => {
 
 writeDBIfMissing();
 
-app.get(['/search', '/title/:type/:id', '/watch'], (req, res) => {
+app.get(['/search', '/title/:type/:id', '/person/:id', '/watch', '/calendar'], (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 

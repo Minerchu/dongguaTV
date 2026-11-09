@@ -18,6 +18,7 @@ class AppPrefs(context: Context) {
     val bundledServerUrl: String get() = normalizeServerUrl(bundled.optString("serverUrl"))
     val bundledAppName: String get() = bundled.optString("appName").ifBlank { "冬瓜TV" }
     val bundledVersionName: String get() = bundled.optString("versionName").ifBlank { "1.0.0" }
+    val bundledVersionCode: Int get() = bundled.optInt("versionCode", 1).coerceAtLeast(1)
 
     var serverUrl: String
         get() {

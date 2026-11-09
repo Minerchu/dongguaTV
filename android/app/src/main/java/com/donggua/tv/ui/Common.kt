@@ -53,6 +53,19 @@ fun openExternal(context: Context, url: String) {
     }
 }
 
+fun openVideoExternal(context: Context, url: String) {
+    if (url.isBlank()) return
+    runCatching {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(url), "video/*")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "选择播放器或投屏应用"))
+    }.onFailure {
+        Toast.makeText(context, "没有找到可用的播放器或投屏应用", Toast.LENGTH_SHORT).show()
+    }
+}
+
 fun copyToClipboard(context: Context, text: String) {
     val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     manager.setPrimaryClip(ClipData.newPlainText("DongguaTV", text))
