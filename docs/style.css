@@ -47,6 +47,12 @@ a:hover { text-decoration: underline; }
     gap: 8px;
 }
 
+.logo img {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+}
+
 .logo small {
     font-weight: 400;
     color: var(--muted);

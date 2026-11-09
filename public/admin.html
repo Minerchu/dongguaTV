@@ -4,12 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>冬瓜TV · 管理后台</title>
+<link rel="icon" href="/assets/favicon.png" type="image/png">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
 <style>
     :root { --accent:#e50914; --ink:#1f2328; --muted:#6b7280; --line:#e5e7eb; }
     body { background:#f5f6f8; color:var(--ink); }
-    .brand-dot { width:10px; height:10px; border-radius:50%; background:var(--accent); display:inline-block; }
+    .brand-logo { width:28px; height:28px; border-radius:8px; object-fit:cover; }
+    .login-logo { width:36px; height:36px; border-radius:10px; object-fit:cover; }
     .card { border:1px solid var(--line); border-radius:12px; }
     .nav-pills .nav-link { color:#555; border-radius:8px; }
     .nav-pills .nav-link.active { background:var(--accent); }
@@ -41,7 +43,8 @@
     <div v-if="!loggedIn" class="login-wrap">
         <div class="card shadow-sm p-4" style="width:380px">
             <div class="d-flex align-items-center gap-2 mb-1">
-                <span class="brand-dot"></span><h5 class="mb-0">冬瓜TV 管理后台</h5>
+                <img class="login-logo" src="/assets/donggua-icon.png" alt="">
+                <h5 class="mb-0">冬瓜TV 管理后台</h5>
             </div>
             <p class="text-muted small mb-4">管理采集站、网盘搜索与使用教程</p>
             <div class="mb-3">
@@ -59,7 +62,7 @@
     <div v-else class="container py-4" style="max-width:1180px">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div class="d-flex align-items-center gap-2">
-                <span class="brand-dot"></span>
+                <img class="brand-logo" src="/assets/donggua-icon.png" alt="">
                 <h4 class="mb-0">冬瓜TV 管理后台</h4>
                 <span class="tag">{{ sites.length }} 个采集站</span>
             </div>
