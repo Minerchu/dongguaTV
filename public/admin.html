@@ -424,9 +424,40 @@
                     <span v-else-if="settings.tmdbSource === 'env'">（来自环境变量）</span>
                     <span v-else-if="settings.tmdbConfigured">（后台已保存，末尾 {{ settings.tmdbCredentialHint }}）</span>
                 </div>
+                <div class="border rounded-3 bg-light-subtle p-3 mb-3">
+                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                        <div>
+                            <div class="fw-semibold"><i class="fas fa-route text-danger me-1"></i>TMDb 网络线路</div>
+                            <div class="small text-muted">服务器无法直连 TMDb 时，在下面填写 Cloudflare Worker 等反代地址。</div>
+                        </div>
+                        <span class="badge" :class="settings.tmdbProxyConfigured || settings.tmdbProxySource === 'env' ? 'bg-success' : 'bg-secondary'">
+                            {{ tmdbAccessLabel }}
+                        </span>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-lg-7">
+                            <label class="form-label small text-muted">TMDb 反代根地址（可选）</label>
+                            <input class="form-control mono" v-model.trim="settings.tmdbProxyUrl" placeholder="https://tmdb.example.workers.dev" @keyup.enter="saveTmdb">
+                            <div class="form-text">
+                                填根地址即可，系统会自动请求 <code>/3</code> 和 <code>/t/p</code>。留空表示服务器直连。
+                                <a href="https://minerchu.github.io/dongguaTV/#tmdb-proxy" target="_blank" rel="noopener">Cloudflare 反代教程</a>
+                            </div>
+                        </div>
+                        <div class="col-lg-5">
+                            <label class="form-label small text-muted">图片反代地址（可选）</label>
+                            <input class="form-control mono" v-model.trim="settings.tmdbImageProxyUrl" placeholder="留空时沿用上面的地址" @keyup.enter="saveTmdb">
+                            <div class="form-text">只有 API 和图片分开代理时才需要填写。</div>
+                        </div>
+                    </div>
+                    <div v-if="settings.tmdbApiEndpoint" class="small text-muted mt-2">
+                        当前 API：<code class="text-break">{{ settings.tmdbApiEndpoint }}</code>
+                        <span class="mx-1">·</span>
+                        当前图片：<code class="text-break">{{ settings.tmdbImageEndpoint }}</code>
+                    </div>
+                </div>
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     <button class="btn btn-danger btn-sm" :disabled="tmdbSaving" @click="saveTmdb">
-                        <i class="fas fa-floppy-disk me-1"></i>{{ tmdbSaving ? '保存中...' : '保存 TMDb 配置' }}
+                        <i class="fas fa-floppy-disk me-1"></i>{{ tmdbSaving ? '保存中...' : '保存 TMDb 设置' }}
                     </button>
                     <button class="btn btn-outline-secondary btn-sm" :disabled="tmdbTesting" @click="testTmdb">
                         <i class="fas fa-vial me-1"></i>{{ tmdbTesting ? '测试中...' : '测试连接' }}
@@ -438,7 +469,7 @@
                         <i class="fas fa-arrow-up-right-from-square me-1"></i>获取 TMDb 凭据
                     </a>
                     <span v-if="tmdbResult" class="small" :class="tmdbResult.success ? 'ok' : 'bad'">
-                        {{ tmdbResult.success ? (tmdbResult.message + (tmdbResult.latency ? '，延迟 ' + tmdbResult.latency + 'ms' : '')) : (tmdbResult.error || '测试失败') }}
+                        {{ tmdbResult.success ? (tmdbResult.message + (tmdbResult.latency ? '，延迟 ' + tmdbResult.latency + 'ms' : '')) : (tmdbResult.error || tmdbResult.message || '测试失败') }}
                     </span>
                 </div>
             </div>
@@ -770,7 +801,9 @@ createApp({
             tab: 'sites', sites: [],
             settings: {
                 pansouUrl: '', pansouToken: '', pansouEnabled: true,
-                tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: ''
+                tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: '',
+                tmdbProxyUrl: '', tmdbImageProxyUrl: '', tmdbProxyConfigured: false, tmdbProxySource: 'default',
+                tmdbApiEndpoint: '', tmdbImageEndpoint: ''
             },
             showTmdbCredential: false, tmdbSaving: false, tmdbTesting: false, tmdbResult: null,
             client: {
@@ -801,6 +834,11 @@ createApp({
                 return this.settings.tmdbType === 'bearer' ? 'Read Access Token（Bearer）' : 'API Key（32 位短密钥）';
             }
             return '尚未填写';
+        },
+        tmdbAccessLabel() {
+            if (this.settings.tmdbProxyUrl || this.settings.tmdbImageProxyUrl) return '后台反代';
+            if (this.settings.tmdbProxySource === 'env') return '环境变量反代';
+            return '服务器直连';
         }
     },
         mounted() { this.checkLogin(); },
@@ -838,7 +876,9 @@ createApp({
                 this.sites = data.sites.map(s => Object.assign({}, s, { _originalKey: s.key }));
                 this.settings = Object.assign({
                     pansouUrl: '', pansouToken: '', pansouEnabled: true,
-                    tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: ''
+                    tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: '',
+                    tmdbProxyUrl: '', tmdbImageProxyUrl: '', tmdbProxyConfigured: false, tmdbProxySource: 'default',
+                    tmdbApiEndpoint: '', tmdbImageEndpoint: ''
                 }, data.settings || {});
                 this.healthLastRun = data.health && data.health.lastRun || 0;
             }
@@ -1318,21 +1358,27 @@ createApp({
         },
         async saveTmdb() {
             const credential = String(this.settings.tmdbCredential || '').trim();
-            if (!credential) {
-                this.tmdbResult = { success: false, error: '请先粘贴一个 TMDb 凭据；如需删除已保存的凭据，请点“清除后台凭据”' };
+            const proxyUrl = String(this.settings.tmdbProxyUrl || '').trim();
+            const imageProxyUrl = String(this.settings.tmdbImageProxyUrl || '').trim();
+            if (!credential && !this.settings.tmdbConfigured && !proxyUrl && !imageProxyUrl) {
+                this.tmdbResult = { success: false, error: '请先填写 TMDb 凭据或反代地址' };
                 return;
             }
             this.tmdbSaving = true;
             this.tmdbResult = null;
             try {
+                const payload = { tmdbProxyUrl: proxyUrl, tmdbImageProxyUrl: imageProxyUrl };
+                if (credential) payload.tmdbCredential = credential;
                 const { data } = await this.api('/api/admin/settings', {
                     method: 'PUT',
-                    body: JSON.stringify({ tmdbCredential: credential })
+                    body: JSON.stringify(payload)
                 });
                 if (data.success) {
                     this.settings = Object.assign({}, this.settings, data.settings || {}, { tmdbCredential: '' });
-                    const hint = this.settings.tmdbCredentialHint ? '（' + this.settings.tmdbCredentialHint + '）' : '';
-                    this.tmdbResult = { success: true, message: 'TMDb 配置已保存' + hint };
+                    const parts = ['TMDb 设置已保存'];
+                    if (credential) parts.push('凭据已更新');
+                    parts.push(proxyUrl || imageProxyUrl ? '已启用反代' : '当前为服务器直连');
+                    this.tmdbResult = { success: true, message: parts.join('，') };
                 } else {
                     this.tmdbResult = { success: false, error: data.error || '保存失败' };
                 }
@@ -1367,7 +1413,11 @@ createApp({
             try {
                 const { data } = await this.api('/api/admin/tmdb/test', {
                     method: 'POST',
-                    body: JSON.stringify({ credential: this.settings.tmdbCredential })
+                    body: JSON.stringify({
+                        credential: this.settings.tmdbCredential,
+                        proxyUrl: this.settings.tmdbProxyUrl,
+                        imageProxyUrl: this.settings.tmdbImageProxyUrl
+                    })
                 });
                 this.tmdbResult = data;
             } catch (e) {

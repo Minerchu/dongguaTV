@@ -41,6 +41,8 @@ test('后台可保存两种 TMDb 凭据并通过代理鉴权', async () => {
     process.env.TMDB_API_READ_TOKEN = '';
     process.env.TMDB_API_BASE = 'http://127.0.0.1:' + mockPort + '/3';
     process.env.TMDB_API_FALLBACK = '';
+    process.env.TMDB_IMAGE_BASE = 'http://127.0.0.1:' + mockPort + '/t/p';
+    process.env.TMDB_IMAGE_FALLBACK = '';
 
     delete require.cache[require.resolve('../server')];
     const app = require('../server');

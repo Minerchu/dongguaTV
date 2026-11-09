@@ -578,11 +578,107 @@ proxy_buffering off;</code></pre>
             </div>
             <p>请求链路：</p>
 <pre><code>浏览器 → https://你的域名/tmdb/... → 容器内 server.js → TMDb</code></pre>
-            <p>默认<strong>不需要填</strong> <code>HTTPS_PROXY</code>、<code>TMDB_API_BASE</code> 或
-            <code>TMDB_IMAGE_BASE</code>。主域名超时或返回 5xx 时会自动切换备用域名。修改 Docker
-            对外端口也不会影响它，因为前端始终请求当前网站地址下的 <code>/tmdb/...</code>。</p>
+            <p>服务器本身能访问 TMDb 时，<strong>不需要填反代</strong>。修改 Docker 对外端口也不会影响它，
+            因为前端始终请求当前网站地址下的 <code>/tmdb/...</code>。</p>
+            <div class="note">
+                注意：<code>/tmdb</code> 是容器内的服务端转发，不是 Cloudflare 反代。服务器在国内时，
+                容器本身仍然连不上 <code>api.themoviedb.org</code>，需要在后台填写下面的反代地址。
+            </div>
 
-            <h3>只有服务器访问不了 TMDb 时</h3>
+            <h3 id="tmdb-proxy">服务器在国内：用 Cloudflare Worker 反代 TMDb</h3>
+            <p>后台「系统设置 → TMDb 影视资料 → TMDb 网络线路」已经可以直接填写反代地址，保存后立即生效，
+            不需要改 <code>.env</code>，也不需要重建容器。</p>
+            <ol>
+                <li>登录 Cloudflare Dashboard，进入 <strong>Workers &amp; Pages</strong>，创建一个 Worker。</li>
+                <li>打开 Worker 的代码编辑器，把下面代码全部替换进去，然后点 <strong>Deploy</strong>。</li>
+                <li>访问 Worker 根地址，例如 <code>https://tmdb-proxy.example.workers.dev</code>，
+                看到 <code>{"ok":true}</code> 说明部署成功。</li>
+                <li>回到冬瓜TV 后台，把这个根地址填进「TMDb 反代根地址」，点「测试连接 → 保存 TMDb 设置」。</li>
+            </ol>
+            <p>只填根地址，不要手动拼 <code>/3</code> 或 <code>/t/p</code>；系统会自动补齐。
+            如果 API 和图片使用不同的代理，再单独填写「图片反代地址」。</p>
+<pre><code>
+const API_ORIGIN = 'https://api.themoviedb.org';
+const IMAGE_ORIGIN = 'https://image.tmdb.org';
+
+function corsHeaders() {
+    return {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, Range',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Content-Type'
+    };
+}
+
+function textResponse(body, status) {
+    return new Response(body, {
+        status: status || 200,
+        headers: Object.assign({ 'Content-Type': 'text/plain; charset=utf-8' }, corsHeaders())
+    });
+}
+
+export default {
+    async fetch(request) {
+        const incoming = new URL(request.url);
+
+        if (request.method === 'OPTIONS') {
+            return new Response(null, { status: 204, headers: corsHeaders() });
+        }
+        if (incoming.pathname === '/' || incoming.pathname === '/health') {
+            return new Response(JSON.stringify({ ok: true, service: 'donggua-tmdb-proxy' }), {
+                headers: Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, corsHeaders())
+            });
+        }
+        if (request.method !== 'GET' &amp;&amp; request.method !== 'HEAD') {
+            return textResponse('Method Not Allowed', 405);
+        }
+
+        let origin = '';
+        if (incoming.pathname.startsWith('/3/')) origin = API_ORIGIN;
+        else if (incoming.pathname.startsWith('/t/p/')) origin = IMAGE_ORIGIN;
+        else return textResponse('Not Found', 404);
+
+        const headers = new Headers();
+        const passHeaders = ['accept', 'accept-language', 'authorization', 'content-type', 'if-modified-since', 'if-none-match', 'range'];
+        for (const name of passHeaders) {
+            const value = request.headers.get(name);
+            if (value) headers.set(name, value);
+        }
+        headers.set('user-agent', 'DongguaTV-TMDB-Proxy/1.0');
+
+        const target = origin + incoming.pathname + incoming.search;
+        const upstream = await fetch(target, {
+            method: request.method,
+            headers,
+            redirect: 'follow',
+            cf: {
+                cacheEverything: true,
+                cacheTtl: incoming.pathname.startsWith('/t/p/') ? 604800 : 300
+            }
+        });
+
+        const responseHeaders = new Headers(upstream.headers);
+        responseHeaders.delete('set-cookie');
+        responseHeaders.set('Access-Control-Allow-Origin', '*');
+        responseHeaders.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Type');
+        responseHeaders.set('X-Donggua-TMDB-Proxy', '1');
+
+        return new Response(request.method === 'HEAD' ? null : upstream.body, {
+            status: upstream.status,
+            statusText: upstream.statusText,
+            headers: responseHeaders
+        });
+    }
+};
+</code></pre>
+            <p>完整文件也在仓库：<a href="https://github.com/Minerchu/dongguaTV/blob/main/examples/cloudflare-tmdb-worker.mjs" target="_blank" rel="noopener">examples/cloudflare-tmdb-worker.mjs</a>。</p>
+
+            <h4>绑定自己的域名</h4>
+            <p>如果 <code>*.workers.dev</code> 在当前网络下访问不了，可以在 Worker 的
+            <strong>Settings → Domains &amp; Routes → Custom Domain</strong> 绑定一个已经接入 Cloudflare 的域名，
+            例如 <code>tmdb.example.com</code>。绑定成功后在后台填 <code>https://tmdb.example.com</code>。</p>
+
+            <h3>其他代理方式</h3>
             <p>在 <code>.env</code> 里填写代理：</p>
 <pre><code>HTTPS_PROXY=http://host.docker.internal:7890
 HTTP_PROXY=http://host.docker.internal:7890</code></pre>
@@ -626,6 +722,7 @@ POST   /api/admin/backups
 POST   /api/admin/backups/:name/restore
 POST   /api/admin/restore
 PUT    /api/admin/settings
+POST   /api/admin/tmdb/test
 POST   /api/admin/pansou/test
 GET    /api/admin/client
 GET    /api/admin/client/qr.png
@@ -664,8 +761,8 @@ DELETE /api/admin/client/icon</code></pre>
             <details>
                 <summary>TMDb 首页没有内容？</summary>
                 <p>确认后台「系统设置」里填了 API Key 或 Read Access Token，并点过「测试连接」。如果服务器访问不了 TMDb，
-                优先换到海外服务器，或配置 <code>HTTPS_PROXY</code>；也可以把
-                <code>TMDB_API_BASE</code> / <code>TMDB_IMAGE_BASE</code> 换成你自己的代理地址。</p>
+                在后台填 Cloudflare Worker 反代地址即可，参考<a href="#tmdb-proxy">TMDb 反代教程</a>。
+                也可以继续使用 <code>HTTPS_PROXY</code> 或环境变量里的 <code>TMDB_API_BASE</code> / <code>TMDB_IMAGE_BASE</code>。</p>
             </details>
             <details>
                 <summary>更新版本后站点数据会丢吗？</summary>

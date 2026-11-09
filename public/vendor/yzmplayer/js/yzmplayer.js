@@ -435,12 +435,12 @@
 									e.src) ? this.type = "flv" : /.mpd(#|\?|$)/i.exec(e.src) ? this.type = "dash" : this.type = "normal"),
 								this.type) {
 								case "hls":
-									if (Hls)
-										if (Hls.isSupported()) {
-											var i = new Hls;
-											i.loadSource(e.src), i.attachMedia(e)
-										} else this.notice("Error: Hls is not supported.");
-									else this.notice("Error: Can't find Hls.");
+									if (typeof Hls !== "undefined" && Hls && Hls.isSupported()) {
+										var i = new Hls;
+										i.loadSource(e.src), i.attachMedia(e)
+									} else if (e.canPlayType("application/vnd.apple.mpegurl") || e.canPlayType("application/x-mpegURL") || e.canPlayType("audio/mpegurl")) {
+										try { e.load(); } catch (err) {}
+									} else this.notice("Error: Hls is not supported.");
 									break;
 								case "flv":
 									if (flvjs && flvjs.isSupported())

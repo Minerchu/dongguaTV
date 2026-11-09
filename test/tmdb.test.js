@@ -57,3 +57,38 @@ test('凭据提示只暴露末尾四位', () => {
     assert.equal(masked, '••••' + READ_TOKEN.slice(-4));
     assert.ok(!masked.includes('eyJ'));
 });
+
+test('TMDb 反代根地址会自动补齐 API 和图片路径', () => {
+    const upstreams = tmdb.resolveUpstreams({ tmdbProxyUrl: 'tmdb.example.com' }, {});
+    assert.equal(upstreams.apiBase, 'https://tmdb.example.com/3');
+    assert.equal(upstreams.imageBase, 'https://tmdb.example.com/t/p');
+    assert.equal(upstreams.apiFallback, '');
+    assert.equal(upstreams.imageFallback, '');
+    assert.equal(upstreams.proxyUrl, 'https://tmdb.example.com');
+});
+
+test('反代地址带 /3 或 /t/p 时也能正确识别', () => {
+    let upstreams = tmdb.resolveUpstreams({ tmdbProxyUrl: 'https://tmdb.example.com/3' }, {});
+    assert.equal(upstreams.apiBase, 'https://tmdb.example.com/3');
+    assert.equal(upstreams.imageBase, 'https://tmdb.example.com/t/p');
+    upstreams = tmdb.resolveUpstreams({ tmdbProxyUrl: 'https://tmdb.example.com/t/p' }, {});
+    assert.equal(upstreams.apiBase, 'https://tmdb.example.com/3');
+    assert.equal(upstreams.imageBase, 'https://tmdb.example.com/t/p');
+});
+
+test('API 和图片可以使用不同的反代地址', () => {
+    const upstreams = tmdb.resolveUpstreams({
+        tmdbProxyUrl: 'https://api-proxy.example.com',
+        tmdbImageProxyUrl: 'https://img-proxy.example.com/t/p'
+    }, {});
+    assert.equal(upstreams.apiBase, 'https://api-proxy.example.com/3');
+    assert.equal(upstreams.imageBase, 'https://img-proxy.example.com/t/p');
+});
+
+test('非法反代地址会被安全忽略', () => {
+    assert.equal(tmdb.sanitizeProxyUrl('javascript:alert(1)'), '');
+    assert.equal(tmdb.sanitizeProxyUrl('ftp://example.com'), '');
+    const upstreams = tmdb.resolveUpstreams({ tmdbProxyUrl: 'javascript:alert(1)' }, {});
+    assert.equal(upstreams.apiBase, 'https://api.themoviedb.org/3');
+    assert.equal(upstreams.imageBase, 'https://image.tmdb.org/t/p');
+});

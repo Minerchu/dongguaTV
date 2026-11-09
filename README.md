@@ -154,6 +154,8 @@ cp examples/adapters/generic-json.js data/adapters/
 
 后台「系统设置」里填写的 TMDb 凭据优先于环境变量，两种凭据只需填一个。完整配置见 [.env.example](.env.example)。改端口只需在 `.env` 写 `HOST_PORT=8080`，再执行 `docker compose up -d`；容器内部仍是 `3000`。
 
+服务器无法直连 TMDb（例如部署在国内）时，在后台「系统设置 → TMDb 网络线路」填写 Cloudflare Worker 反代根地址即可，保存后立即生效。教程和 Worker 代码见[这里](https://minerchu.github.io/dongguaTV/#tmdb-proxy)。
+
 ## 数据与更新
 
 后台「备份与恢复」可以下载、创建和恢复备份；自动备份在 `data/backups/`，每天一次，保留 7 份。

@@ -38,10 +38,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
 const TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT) || 5000;
 const PANSOU_TIMEOUT = Number(process.env.PANSOU_TIMEOUT) || 15000;
-const TMDB_API_BASE = (process.env.TMDB_API_BASE || 'https://api.themoviedb.org/3').replace(/\/+$/, '');
-const TMDB_IMAGE_BASE = (process.env.TMDB_IMAGE_BASE || 'https://image.tmdb.org/t/p').replace(/\/+$/, '');
-const TMDB_API_FALLBACK = (process.env.TMDB_API_FALLBACK || (TMDB_API_BASE === 'https://api.themoviedb.org/3' ? 'https://api.tmdb.org/3' : '')).replace(/\/+$/, '');
-const TMDB_IMAGE_FALLBACK = (process.env.TMDB_IMAGE_FALLBACK || (TMDB_IMAGE_BASE === 'https://image.tmdb.org/t/p' ? 'https://www.themoviedb.org/t/p' : '')).replace(/\/+$/, '');
 const TMDB_TIMEOUT = Number(process.env.TMDB_TIMEOUT) || 15000;
 const TMDB_LANGUAGE = process.env.TMDB_LANGUAGE || 'zh-CN';
 const SEARCH_CACHE_TTL = 60 * 1000;
@@ -86,6 +82,8 @@ function defaultSettings() {
         pansouToken: '',
         pansouEnabled: true,
         tmdbCredential: '',
+        tmdbProxyUrl: '',
+        tmdbImageProxyUrl: '',
         client: defaultClientSettings()
     };
 }
@@ -93,6 +91,8 @@ function normalizeSettings(input) {
     const source = input && typeof input === 'object' ? input : {};
     const merged = Object.assign(defaultSettings(), source);
     merged.tmdbCredential = tmdb.normalizeCredential(merged.tmdbCredential).slice(0, 500);
+    merged.tmdbProxyUrl = tmdb.sanitizeProxyUrl(merged.tmdbProxyUrl);
+    merged.tmdbImageProxyUrl = tmdb.sanitizeProxyUrl(merged.tmdbImageProxyUrl);
     merged.client = Object.assign(defaultClientSettings(), source.client || {});
     const versionCode = Number(merged.client.versionCode);
     merged.client.versionCode = Number.isFinite(versionCode) && versionCode > 0 ? Math.floor(versionCode) : 1;
@@ -103,14 +103,22 @@ function normalizeSettings(input) {
 function tmdbState(settings) {
     return tmdb.resolveCredential(settings || getDB().settings || {}, process.env);
 }
+function tmdbUpstreams(settings) {
+    return tmdb.resolveUpstreams(settings || getDB().settings || {}, process.env);
+}
 function adminSettingsView(settings) {
     const state = tmdbState(settings);
+    const upstreams = tmdbUpstreams(settings);
     return Object.assign({}, settings, {
         tmdbCredential: '',
         tmdbCredentialHint: tmdb.maskCredential(state.value),
         tmdbConfigured: Boolean(state.value),
         tmdbType: state.type,
-        tmdbSource: state.source
+        tmdbSource: state.source,
+        tmdbProxyConfigured: Boolean(upstreams.proxyUrl || upstreams.imageProxyUrl),
+        tmdbProxySource: upstreams.proxyUrl || upstreams.imageProxyUrl ? 'admin' : (upstreams.apiSource === 'env' || upstreams.imageSource === 'env' ? 'env' : 'default'),
+        tmdbApiEndpoint: upstreams.apiBase,
+        tmdbImageEndpoint: upstreams.imageBase
     });
 }
 function defaultDB() {
@@ -659,8 +667,9 @@ app.get('/tmdb/3/*', async (req, res) => {
     const auth = tmdb.buildAuth(credential.value);
     Object.assign(params, auth.params);
     if (!params.language) params.language = TMDB_LANGUAGE;
-    const bases = [TMDB_API_BASE];
-    if (TMDB_API_FALLBACK && TMDB_API_FALLBACK !== TMDB_API_BASE) bases.push(TMDB_API_FALLBACK);
+    const upstreams = tmdbUpstreams();
+    const bases = [upstreams.apiBase];
+    if (upstreams.apiFallback && upstreams.apiFallback !== upstreams.apiBase) bases.push(upstreams.apiFallback);
     for (let i = 0; i < bases.length; i++) {
         try {
             const upstream = await axios.get(bases[i] + '/' + pathPart, {
@@ -683,8 +692,9 @@ app.get('/tmdb/3/*', async (req, res) => {
 app.get('/tmdb/t/p/*', async (req, res) => {
     const pathPart = String(req.params[0] || '').replace(/^\/+/, '');
     if (!/^[A-Za-z0-9/_.-]+$/.test(pathPart) || pathPart.includes('..')) return res.status(400).end();
-    const bases = [TMDB_IMAGE_BASE];
-    if (TMDB_IMAGE_FALLBACK && TMDB_IMAGE_FALLBACK !== TMDB_IMAGE_BASE) bases.push(TMDB_IMAGE_FALLBACK);
+    const upstreams = tmdbUpstreams();
+    const bases = [upstreams.imageBase];
+    if (upstreams.imageFallback && upstreams.imageFallback !== upstreams.imageBase) bases.push(upstreams.imageFallback);
     for (let i = 0; i < bases.length; i++) {
         try {
             const upstream = await axios.get(bases[i] + '/' + pathPart, {
@@ -1274,6 +1284,14 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
     if (body.tmdbCredential !== undefined) {
         db.settings.tmdbCredential = tmdb.normalizeCredential(body.tmdbCredential).slice(0, 500);
     }
+    if (body.tmdbProxyUrl !== undefined) {
+        try { db.settings.tmdbProxyUrl = tmdb.normalizeProxyUrl(body.tmdbProxyUrl); }
+        catch (error) { return res.status(400).json({ success: false, error: error.message }); }
+    }
+    if (body.tmdbImageProxyUrl !== undefined) {
+        try { db.settings.tmdbImageProxyUrl = tmdb.normalizeProxyUrl(body.tmdbImageProxyUrl); }
+        catch (error) { return res.status(400).json({ success: false, error: error.message }); }
+    }
     saveDB(db);
     pansouTokenCache = { token: '', exp: 0 };
     invalidateCatalogCache();
@@ -1281,13 +1299,23 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
 });
 
 app.post('/api/admin/tmdb/test', requireAdmin, async (req, res) => {
-    const supplied = tmdb.normalizeCredential(req.body && req.body.credential);
+    const body = req.body || {};
+    const supplied = tmdb.normalizeCredential(body.credential);
     const saved = tmdbState();
     const credential = supplied || saved.value;
     if (!credential) return res.status(400).json({ success: false, error: '请先填写 TMDb API Key 或 Read Access Token' });
+    const db = getDB();
+    const testSettings = Object.assign({}, db.settings);
+    try {
+        if (body.proxyUrl !== undefined) testSettings.tmdbProxyUrl = tmdb.normalizeProxyUrl(body.proxyUrl);
+        if (body.imageProxyUrl !== undefined) testSettings.tmdbImageProxyUrl = tmdb.normalizeProxyUrl(body.imageProxyUrl);
+    } catch (error) {
+        return res.status(400).json({ success: false, error: error.message });
+    }
+    const upstreams = tmdb.resolveUpstreams(testSettings, process.env);
     const auth = tmdb.buildAuth(credential);
-    const bases = [TMDB_API_BASE];
-    if (TMDB_API_FALLBACK && TMDB_API_FALLBACK !== TMDB_API_BASE) bases.push(TMDB_API_FALLBACK);
+    const bases = [upstreams.apiBase];
+    if (upstreams.apiFallback && upstreams.apiFallback !== upstreams.apiBase) bases.push(upstreams.apiFallback);
     let lastError = '';
     for (const base of bases) {
         const started = Date.now();
@@ -1299,11 +1327,34 @@ app.post('/api/admin/tmdb/test', requireAdmin, async (req, res) => {
                 validateStatus: () => true
             });
             if (upstream.status >= 200 && upstream.status < 300) {
+                let imageOk = false;
+                let imageError = '';
+                const imageStarted = Date.now();
+                try {
+                    const image = await axios.get(upstreams.imageBase + '/w92/wwemzKWzjKYJFfCeiB57q3r4Bcm.png', {
+                        responseType: 'stream',
+                        timeout: Math.min(TMDB_TIMEOUT, 10000),
+                        validateStatus: () => true
+                    });
+                    imageOk = image.status >= 200 && image.status < 300;
+                    if (!imageOk) imageError = '图片反代返回 HTTP ' + image.status;
+                    if (image.data && image.data.destroy) image.data.destroy();
+                } catch (error) {
+                    imageError = error.code === 'ECONNABORTED' ? '图片反代连接超时' : (error.message || '图片反代连接失败');
+                }
                 return res.json({
-                    success: true,
+                    success: imageOk,
                     type: auth.type,
                     latency: Date.now() - started,
-                    message: auth.type === 'bearer' ? 'Read Access Token 有效' : 'API Key 有效'
+                    imageLatency: Date.now() - imageStarted,
+                    imageOk,
+                    imageError,
+                    error: imageOk ? '' : (imageError || '图片反代不可用'),
+                    apiEndpoint: upstreams.apiBase,
+                    imageEndpoint: upstreams.imageBase,
+                    message: imageOk
+                        ? ((auth.type === 'bearer' ? 'Read Access Token 有效' : 'API Key 有效') + '，图片反代正常')
+                        : ((auth.type === 'bearer' ? 'Read Access Token 有效' : 'API Key 有效') + '，但图片反代不可用')
                 });
             }
             if (upstream.status === 401 || upstream.status === 403) {
