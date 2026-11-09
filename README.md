@@ -18,7 +18,7 @@
 
 | 首页 | 详情 |
 | --- | --- |
-| ![首页](docs/assets/screenshots/home-tmdb.jpg) | ![详情](docs/assets/screenshots/tmdb-detail.jpg) |
+| ![首页](docs/assets/screenshots/home-tmdb.jpg?v=20261109) | ![详情](docs/assets/screenshots/tmdb-detail.jpg?v=20261109) |
 
 电脑和电视使用横版剧照，手机自动切换无字竖版海报。详情页由大背景、海报缩略图和 TMDb 透明 Logo 组成。
 
