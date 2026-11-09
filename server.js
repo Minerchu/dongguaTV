@@ -10,6 +10,10 @@ const fs = require('fs');
 const path = require('path');
 const { buildApk, isAvailable: isApkBuilderAvailable } = require('./apk-builder');
 const tvbox = require('./tvbox');
+const aggregate = require('./aggregate');
+const health = require('./health');
+const playback = require('./playback');
+const backup = require('./backup');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -21,6 +25,9 @@ const DATA_DIR = path.dirname(DATA_FILE);
 const CLIENT_DIR = path.join(DATA_DIR, 'android-client');
 const APP_APK_FILE = path.join(CLIENT_DIR, 'donggua-tv.apk');
 const APP_ICON_FILE = path.join(CLIENT_DIR, 'icon.png');
+const BACKUP_DIR = process.env.BACKUP_DIR
+    ? path.resolve(process.env.BACKUP_DIR)
+    : path.join(DATA_DIR, 'backups');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const SEARCH_TIMEOUT = Number(process.env.SEARCH_TIMEOUT) || 6000;
 const TEST_TIMEOUT = Number(process.env.TEST_TIMEOUT) || 5000;
@@ -36,8 +43,9 @@ const SEARCH_CACHE_TTL = 60 * 1000;
 const SESSION_TTL = 24 * 60 * 60 * 1000;
 
 app.disable('x-powered-by');
+app.set('trust proxy', true);
 app.use(cors({ origin: true, credentials: true }));
-app.use(bodyParser.json({ limit: '1mb' }));
+app.use(bodyParser.json({ limit: '5mb' }));
 app.use(express.static(PUBLIC_DIR));
 
 // ========== 数据 ==========
@@ -81,6 +89,36 @@ function normalizeSettings(input) {
 }
 function defaultDB() {
     return { sites: [], settings: defaultSettings(), version: 3 };
+}
+function sanitizeRestoredDatabase(input) {
+    if (!input || typeof input !== 'object' || !Array.isArray(input.sites)) {
+        throw new Error('备份文件里没有 sites 数组');
+    }
+    const sites = [];
+    const apis = new Set();
+    const keys = new Set();
+    for (const raw of input.sites.slice(0, 500)) {
+        if (!raw || typeof raw !== 'object') continue;
+        let api;
+        try { api = normalizeApi(raw.api); } catch (error) { continue; }
+        if (apis.has(api)) continue;
+        let key = cleanText(raw.key, 40);
+        if (!validKey(key) || keys.has(key)) key = makeKey(api, keys);
+        keys.add(key);
+        apis.add(api);
+        sites.push({
+            key,
+            name: cleanText(raw.name, 40) || siteHost(api),
+            api,
+            active: raw.active !== false
+        });
+    }
+    const settings = normalizeSettings(input.settings);
+    if (settings.client && settings.client.buildStatus === 'building') {
+        settings.client.buildStatus = 'idle';
+        settings.client.buildMessage = '已从备份恢复，等待重新生成';
+    }
+    return { sites, settings, version: 3 };
 }
 function atomicWrite(file, text) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -415,6 +453,62 @@ async function testApi(api) {
     }
 }
 
+const healthMonitor = health.createHealthMonitor({ check: testApi });
+
+function invalidateCatalogCache() {
+    searchCache.clear();
+    hotCache.clear();
+}
+
+function activeSites() {
+    return getDB().sites.filter(site => site.active !== false && site.api);
+}
+
+function searchableSites() {
+    const all = activeSites();
+    return {
+        sites: all.filter(site => !healthMonitor.isCooling(site.key)),
+        cooling: all.filter(site => healthMonitor.isCooling(site.key)).length
+    };
+}
+
+function proxyUrlFor(target, siteKey) {
+    const value = String(target || '').trim();
+    if (!value || value.startsWith('/api/play/proxy')) return value;
+    let suffix = '?url=' + encodeURIComponent(value);
+    if (siteKey) suffix += '&site=' + encodeURIComponent(siteKey);
+    return '/api/play/proxy' + suffix;
+}
+
+async function runHealthCheck(options) {
+    const opts = options || {};
+    const db = getDB();
+    const sites = opts.key
+        ? db.sites.filter(site => site.key === opts.key)
+        : db.sites;
+    if (!sites.length) return { sites: [], lastRun: healthMonitor.lastRun };
+    const result = await healthMonitor.checkSites(sites, { force: Boolean(opts.force) });
+    return { sites: result, lastRun: healthMonitor.lastRun, running: healthMonitor.running };
+}
+
+function startBackgroundJobs() {
+    if (process.env.HEALTH_CHECK !== '0') {
+        const check = () => runHealthCheck({ force: false }).catch(error => console.error('[Health]', error.message));
+        setTimeout(check, 4000).unref();
+        setInterval(check, 10 * 60 * 1000).unref();
+    }
+    const createDailyBackup = () => {
+        try {
+            const result = backup.createBackup(DATA_FILE, BACKUP_DIR, { keep: 7 });
+            if (result) console.log('[Backup] ' + result.name);
+        } catch (error) {
+            console.error('[Backup]', error.message);
+        }
+    };
+    createDailyBackup();
+    setInterval(createDailyBackup, 24 * 60 * 60 * 1000).unref();
+}
+
 // ========== 网盘搜索（PanSou） ==========
 function pansouBase() {
     const s = getDB().settings || {};
@@ -537,9 +631,11 @@ app.get('/tmdb/t/p/*', async (req, res) => {
 // ========== 公共 API ==========
 app.get('/api/config', (req, res) => {
     const db = getDB();
+    const active = db.sites.filter(s => s.active !== false);
     res.json({
         cloudEnabled: Boolean(pansouBase()) && db.settings.pansouEnabled !== false,
-        siteCount: db.sites.filter(s => s.active !== false).length,
+        siteCount: active.length,
+        cooling: active.filter(site => healthMonitor.isCooling(site.key)).length,
         android: publicAndroidState()
     });
 });
@@ -580,8 +676,11 @@ app.get('/api/check', async (req, res) => {
         const resp = await axios.get(withQuery(site.api, 'ac=list&pg=1'), { timeout: 3000, validateStatus: () => true });
         const latency = Date.now() - started;
         const ok = Boolean(parseMaccmsList(resp.data));
+        if (ok) healthMonitor.recordSuccess(key, latency);
+        else healthMonitor.recordFailure(key, '接口没有返回 Maccms JSON');
         res.json({ latency: ok ? latency : 9999, ok });
     } catch (e) {
+        healthMonitor.recordFailure(key, e.message);
         res.json({ latency: 9999, ok: false });
     }
 });
@@ -589,8 +688,9 @@ app.get('/api/check', async (req, res) => {
 app.get('/api/hot', async (req, res) => {
     const cached = cacheGet(hotCache, 'hot');
     if (cached) return res.json(cached);
-    const sites = getDB().sites.filter(s => s.active !== false && s.api).slice(0, 8);
+    const sites = searchableSites().sites.slice(0, 8);
     for (const site of sites) {
+        const started = Date.now();
         try {
             const response = await axios.get(withQuery(site.api, 'ac=list&pg=1&h=24&out=json'), {
                 timeout: 4000,
@@ -598,11 +698,15 @@ app.get('/api/hot', async (req, res) => {
             });
             const list = parseMaccmsList(response.data);
             if (list && list.length > 0) {
-                const payload = { list: list.slice(0, 12) };
+                healthMonitor.recordSuccess(site.key, Date.now() - started);
+                const payload = { list: list.slice(0, 12).map(item => Object.assign({}, item, { site_key: site.key, site_name: site.name })) };
                 cacheSet(hotCache, 'hot', payload, 5 * 60 * 1000);
                 return res.json(payload);
             }
-        } catch (e) { /* 换下一个源 */ }
+            healthMonitor.recordFailure(site.key, '热榜接口没有返回列表');
+        } catch (e) {
+            healthMonitor.recordFailure(site.key, e.message);
+        }
     }
     res.json({ list: [] });
 });
@@ -614,9 +718,11 @@ app.get('/api/search', async (req, res) => {
     const cached = cacheGet(searchCache, cacheKey);
     if (cached) return res.json(cached);
 
-    const sites = getDB().sites.filter(s => s.active !== false && s.api);
+    const searchable = searchableSites();
+    const sites = searchable.sites;
     let errors = 0;
     const chunks = await mapLimit(sites, 8, async (site) => {
+        const started = Date.now();
         try {
             const response = await axios.get(withQuery(site.api, 'ac=list&wd=' + encodeURIComponent(wd) + '&out=json'), {
                 timeout: SEARCH_TIMEOUT,
@@ -624,19 +730,34 @@ app.get('/api/search', async (req, res) => {
                 validateStatus: () => true
             });
             const list = parseMaccmsList(response.data);
-            if (!Array.isArray(list)) { errors++; return []; }
+            if (!Array.isArray(list)) {
+                errors++;
+                healthMonitor.recordFailure(site.key, '接口没有返回列表');
+                return [];
+            }
+            healthMonitor.recordSuccess(site.key, Date.now() - started);
             return list.map(item => ({
                 ...item,
                 site_key: site.key,
                 site_name: site.name,
-                latency: 0
+                latency: Date.now() - started
             }));
         } catch (e) {
             errors++;
+            healthMonitor.recordFailure(site.key, e.code === 'ECONNABORTED' ? '连接超时' : e.message);
             return [];
         }
     });
-    const payload = { list: chunks.flat(), errors, siteCount: sites.length };
+    const list = chunks.flat();
+    const groups = aggregate.groupSearchResults(list);
+    const payload = {
+        list,
+        groups,
+        errors,
+        siteCount: sites.length,
+        cooling: searchable.cooling,
+        total: list.length
+    };
     cacheSet(searchCache, cacheKey, payload, SEARCH_CACHE_TTL);
     res.json(payload);
 });
@@ -646,12 +767,105 @@ app.get('/api/detail', async (req, res) => {
     const id = cleanText(req.query.id, 60);
     const targetSite = getDB().sites.find(s => s.key === siteKey);
     if (!targetSite) return res.status(404).json({ error: 'Site not found' });
+    const started = Date.now();
     try {
         const response = await axios.get(withQuery(targetSite.api, 'ac=detail&ids=' + encodeURIComponent(id) + '&out=json'), { timeout: 8000 });
+        healthMonitor.recordSuccess(siteKey, Date.now() - started);
         res.json(response.data);
     } catch (e) {
+        healthMonitor.recordFailure(siteKey, e.message);
         res.status(502).json({ error: 'Source Error' });
     }
+});
+
+app.get('/api/play/proxy', async (req, res) => {
+    const target = cleanText(req.query.url, 4000);
+    const siteKey = cleanText(req.query.site, 60);
+    if (!target) return res.status(400).json({ error: '缺少播放地址' });
+    const site = getDB().sites.find(s => s.key === siteKey) || null;
+    try {
+        const opened = await playback.openStream(target, {
+            site,
+            method: req.method,
+            range: req.headers.range
+        });
+        const upstream = opened.response;
+        const contentType = String(upstream.headers['content-type'] || 'application/octet-stream');
+        res.status(upstream.status);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Accept-Ranges', upstream.headers['accept-ranges'] || 'bytes');
+        if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
+        if (upstream.headers['content-range']) res.setHeader('Content-Range', upstream.headers['content-range']);
+        if (upstream.headers['last-modified']) res.setHeader('Last-Modified', upstream.headers['last-modified']);
+        if (upstream.headers.etag) res.setHeader('ETag', upstream.headers.etag);
+
+        if (upstream.status >= 400) {
+            if (upstream.data && upstream.data.destroy) upstream.data.destroy();
+            return res.end();
+        }
+
+        const playlist = req.method !== 'HEAD' && playback.isPlaylistRequest(opened.finalUrl, contentType);
+        if (playlist) {
+            const buffer = await playback.collectStream(upstream.data);
+            const text = buffer.toString('utf8');
+            res.removeHeader('Content-Length');
+            if (text.replace(/^\uFEFF/, '').trimStart().startsWith('#EXTM3U')) {
+                const rewritten = playback.rewriteHlsPlaylist(text, opened.finalUrl, url => proxyUrlFor(url, siteKey));
+                res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+                res.setHeader('Cache-Control', 'no-cache');
+                return res.send(rewritten);
+            }
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Cache-Control', 'no-cache');
+            return res.send(buffer);
+        }
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        if (req.method === 'HEAD') {
+            if (upstream.data && upstream.data.destroy) upstream.data.destroy();
+            return res.end();
+        }
+        upstream.data.on('error', () => res.destroy());
+        res.on('close', () => { if (upstream.data && upstream.data.destroy) upstream.data.destroy(); });
+        upstream.data.pipe(res);
+    } catch (error) {
+        res.status(502).json({ error: String(error && error.message || '播放代理请求失败').slice(0, 200) });
+    }
+});
+
+app.get('/api/status', (req, res) => {
+    const db = getDB();
+    const active = db.sites.filter(site => site.active !== false && site.api);
+    const healthy = active.filter(site => {
+        const state = healthMonitor.snapshot(site.key);
+        return state.ok === true && !state.cooling;
+    }).length;
+    const checked = active.filter(site => healthMonitor.snapshot(site.key).lastCheck > 0).length;
+    res.json({
+        ok: true,
+        uptime: Math.floor(process.uptime()),
+        time: new Date().toISOString(),
+        sites: {
+            total: db.sites.length,
+            active: active.length,
+            healthy,
+            cooling: active.filter(site => healthMonitor.isCooling(site.key)).length,
+            checked
+        },
+        health: {
+            lastRun: healthMonitor.lastRun ? new Date(healthMonitor.lastRun).toISOString() : '',
+            running: healthMonitor.running
+        },
+        cloud: {
+            configured: Boolean(pansouBase()),
+            enabled: Boolean(pansouBase()) && db.settings.pansouEnabled !== false
+        },
+        android: {
+            available: publicAndroidState().available,
+            version: publicAndroidState().version
+        }
+    });
 });
 
 app.get('/api/cloud/search', async (req, res) => {
@@ -707,7 +921,35 @@ app.get('/api/admin/me', (req, res) => {
 
 app.get('/api/admin/sites', requireAdmin, (req, res) => {
     const db = getDB();
-    res.json({ sites: db.sites, settings: db.settings });
+    const sites = db.sites.map(site => Object.assign({}, site, {
+        health: healthMonitor.snapshot(site.key)
+    }));
+    res.json({
+        sites,
+        settings: db.settings,
+        health: {
+            lastRun: healthMonitor.lastRun,
+            running: healthMonitor.running
+        }
+    });
+});
+
+app.get('/api/admin/health', requireAdmin, (req, res) => {
+    const db = getDB();
+    res.json({
+        sites: healthMonitor.status(db.sites),
+        lastRun: healthMonitor.lastRun,
+        running: healthMonitor.running
+    });
+});
+
+app.post('/api/admin/health/check', requireAdmin, async (req, res) => {
+    try {
+        const result = await runHealthCheck({ key: cleanText(req.body.key, 60), force: true });
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 app.get('/api/admin/client', requireAdmin, (req, res) => {
@@ -792,6 +1034,7 @@ app.post('/api/admin/sites', requireAdmin, async (req, res) => {
     }
     db.sites.push(site);
     saveDB(db);
+    invalidateCatalogCache();
     res.json({ success: true, site, test });
 });
 
@@ -815,6 +1058,7 @@ app.put('/api/admin/sites/:key', requireAdmin, async (req, res) => {
         site.key = newKey;
     }
     saveDB(db);
+    invalidateCatalogCache();
     res.json({ success: true, site });
 });
 
@@ -825,6 +1069,7 @@ app.delete('/api/admin/sites/:key', requireAdmin, (req, res) => {
     db.sites = db.sites.filter(s => s.key !== key);
     if (db.sites.length === before) return res.status(404).json({ success: false, error: '站点不存在' });
     saveDB(db);
+    invalidateCatalogCache();
     res.json({ success: true });
 });
 
@@ -858,6 +1103,7 @@ app.post('/api/admin/sites/import', requireAdmin, async (req, res) => {
         added.push(api);
     }
     saveDB(db);
+    invalidateCatalogCache();
     res.json({ success: true, added: added.length, skipped: skipped.length, failed: failed.length, details: { added, skipped, failed } });
 });
 
@@ -894,7 +1140,10 @@ app.post('/api/admin/import/sites', requireAdmin, (req, res) => {
         existingApis.add(api);
         added.push({ name, api });
     }
-    if (added.length) saveDB(db);
+    if (added.length) {
+        saveDB(db);
+        invalidateCatalogCache();
+    }
     res.json({ success: true, added: added.length, skipped: skipped.length, failed: failed.length, details: { added, skipped, failed } });
 });
 
@@ -910,6 +1159,7 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
     if (body.pansouEnabled !== undefined) db.settings.pansouEnabled = Boolean(body.pansouEnabled);
     saveDB(db);
     pansouTokenCache = { token: '', exp: 0 };
+    invalidateCatalogCache();
     res.json({ success: true, settings: db.settings });
 });
 
@@ -937,7 +1187,73 @@ app.post('/api/admin/sites-legacy', requireAdmin, (req, res) => {
     const db = getDB();
     db.sites = sites.map(s => ({ key: s.key, name: s.name, api: s.api, active: s.active !== false }));
     saveDB(db);
+    invalidateCatalogCache();
     res.json({ success: true });
+});
+
+// ========== 备份与恢复 ==========
+app.get('/api/admin/backup', requireAdmin, (req, res) => {
+    if (!fs.existsSync(DATA_FILE)) return res.status(404).json({ success: false, error: '数据库还不存在' });
+    const name = 'donggua-db-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.json';
+    res.setHeader('Cache-Control', 'no-store');
+    res.download(DATA_FILE, name);
+});
+
+app.get('/api/admin/backups', requireAdmin, (req, res) => {
+    res.json({ success: true, backups: backup.listBackups(BACKUP_DIR) });
+});
+
+app.post('/api/admin/backups', requireAdmin, (req, res) => {
+    try {
+        const item = backup.createBackup(DATA_FILE, BACKUP_DIR, { keep: 7 });
+        if (!item) return res.status(404).json({ success: false, error: '数据库还不存在' });
+        res.json({ success: true, backup: item, backups: backup.listBackups(BACKUP_DIR) });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/admin/backups/:name', requireAdmin, (req, res) => {
+    try {
+        const file = backup.backupPath(BACKUP_DIR, req.params.name);
+        if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: '备份不存在' });
+        res.setHeader('Cache-Control', 'no-store');
+        res.download(file, path.basename(file));
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+function restoreDatabase(content) {
+    let parsed;
+    try { parsed = JSON.parse(String(content || '')); } catch (error) { throw new Error('备份内容不是有效 JSON'); }
+    const restored = sanitizeRestoredDatabase(parsed);
+    backup.createBackup(DATA_FILE, BACKUP_DIR, { keep: 7 });
+    saveDB(restored);
+    invalidateCatalogCache();
+    healthMonitor.status(restored.sites);
+    return restored;
+}
+
+app.post('/api/admin/backups/:name/restore', requireAdmin, (req, res) => {
+    try {
+        const content = backup.readBackup(BACKUP_DIR, req.params.name);
+        const restored = restoreDatabase(content);
+        res.json({ success: true, sites: restored.sites.length });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/admin/restore', requireAdmin, (req, res) => {
+    try {
+        const content = req.body && (req.body.content || req.body.data);
+        if (!content) return res.status(400).json({ success: false, error: '请选择备份文件' });
+        const restored = restoreDatabase(content);
+        res.json({ success: true, sites: restored.sites.length });
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message });
+    }
 });
 
 writeDBIfMissing();
@@ -946,8 +1262,13 @@ app.get(['/search', '/title/:type/:id', '/watch'], (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
+app.get('/status', (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'status.html'));
+});
+
 if (require.main === module) {
     resetInterruptedBuild();
+    startBackgroundJobs();
     app.listen(PORT, () => {
         console.log(`服务已启动: http://localhost:${PORT}`);
         console.log(`后台管理: http://localhost:${PORT}/admin.html`);

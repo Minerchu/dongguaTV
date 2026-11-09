@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>冬瓜TV · 服务状态</title>
+<link rel="icon" href="/assets/favicon.png" type="image/png">
+<style>
+    :root { --bg:#0b0b0c; --panel:#151517; --line:#2a2a2d; --text:#f2f2f2; --muted:#8b8b91; --ok:#46d369; --warn:#f5a524; --bad:#e5484d; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; color:var(--text); background:
+        radial-gradient(circle at 22% 0%, rgba(229,9,20,.16), transparent 36%),
+        radial-gradient(circle at 88% 18%, rgba(70,211,105,.08), transparent 30%), var(--bg);
+        font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+    .wrap { max-width:900px; margin:0 auto; padding:54px 22px 70px; }
+    .brand { display:flex; align-items:center; gap:12px; margin-bottom:8px; }
+    .brand img { width:38px; height:38px; border-radius:11px; object-fit:cover; }
+    h1 { font-size:26px; margin:0; letter-spacing:.4px; }
+    .subtitle { color:var(--muted); font-size:13px; margin:8px 0 30px; }
+    .hero { display:flex; align-items:center; gap:16px; background:linear-gradient(135deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+        border:1px solid var(--line); border-radius:16px; padding:22px 24px; margin-bottom:18px; }
+    .pulse { width:13px; height:13px; border-radius:50%; background:var(--ok); box-shadow:0 0 0 0 rgba(70,211,105,.7); animation:pulse 2s infinite; flex:0 0 auto; }
+    .hero.bad .pulse { background:var(--bad); box-shadow:none; animation:none; }
+    .hero strong { display:block; font-size:18px; margin-bottom:4px; }
+    .hero span { color:var(--muted); font-size:13px; }
+    @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(70,211,105,.6); } 70% { box-shadow:0 0 0 12px rgba(70,211,105,0); } 100% { box-shadow:0 0 0 0 rgba(70,211,105,0); } }
+    .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+    .card .label { color:var(--muted); font-size:12px; margin-bottom:9px; }
+    .card .value { font-size:27px; font-weight:800; line-height:1; }
+    .card .value small { font-size:13px; color:var(--muted); font-weight:500; margin-left:3px; }
+    .rows { background:var(--panel); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:15px 18px; border-bottom:1px solid var(--line); font-size:14px; }
+    .row:last-child { border-bottom:0; }
+    .row .name { color:#d9d9dd; }
+    .row .state { color:var(--muted); font-size:13px; text-align:right; }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; background:var(--muted); }
+    .dot.ok { background:var(--ok); } .dot.warn { background:var(--warn); } .dot.bad { background:var(--bad); }
+    .footer { color:#5f5f66; font-size:12px; margin-top:24px; display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    .footer a { color:#8b8b91; text-decoration:none; } .footer a:hover { color:#fff; }
+    @media (max-width:720px) { .grid { grid-template-columns:repeat(2,1fr); } .wrap { padding-top:34px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="brand"><img src="/assets/donggua-icon.png" alt=""><h1>冬瓜TV 服务状态</h1></div>
+    <div class="subtitle">只展示服务运行情况，不公开任何采集站地址。</div>
+
+    <div class="hero" id="hero">
+        <div class="pulse"></div>
+        <div><strong id="heroTitle">正在读取状态...</strong><span id="heroText">请稍候</span></div>
+    </div>
+
+    <div class="grid">
+        <div class="card"><div class="label">采集站总数</div><div class="value" id="total">-</div></div>
+        <div class="card"><div class="label">已启用</div><div class="value" id="active">-</div></div>
+        <div class="card"><div class="label">当前健康</div><div class="value" id="healthy">-</div></div>
+        <div class="card"><div class="label">冷却中</div><div class="value" id="cooling">-</div></div>
+    </div>
+
+    <div class="rows">
+        <div class="row"><span class="name"><span class="dot" id="cloudDot"></span>网盘搜索</span><span class="state" id="cloudState">-</span></div>
+        <div class="row"><span class="name"><span class="dot" id="checkDot"></span>自动巡检</span><span class="state" id="checkState">-</span></div>
+        <div class="row"><span class="name"><span class="dot ok"></span>服务运行时间</span><span class="state" id="uptime">-</span></div>
+        <div class="row"><span class="name"><span class="dot ok"></span>Android 客户端</span><span class="state" id="androidState">-</span></div>
+    </div>
+
+    <div class="footer">
+        <span>最近更新：<span id="updated">-</span></span>
+        <a href="/">返回首页</a>
+    </div>
+</div>
+<script>
+function duration(seconds) {
+    const value = Number(seconds) || 0;
+    const days = Math.floor(value / 86400);
+    const hours = Math.floor(value % 86400 / 3600);
+    const minutes = Math.floor(value % 3600 / 60);
+    if (days) return days + ' 天 ' + hours + ' 小时';
+    if (hours) return hours + ' 小时 ' + minutes + ' 分';
+    return minutes + ' 分钟';
+}
+async function refresh() {
+    try {
+        const response = await fetch('/api/status', { cache: 'no-store' });
+        const data = await response.json();
+        const sites = data.sites || {};
+        const health = data.health || {};
+        document.getElementById('hero').classList.remove('bad');
+        document.getElementById('heroTitle').textContent = data.ok ? '服务运行正常' : '服务状态异常';
+        document.getElementById('heroText').textContent = '采集搜索、详情和播放接口在线';
+        document.getElementById('total').textContent = sites.total || 0;
+        document.getElementById('active').textContent = sites.active || 0;
+        document.getElementById('healthy').textContent = sites.healthy || 0;
+        document.getElementById('cooling').textContent = sites.cooling || 0;
+
+        const cloud = data.cloud || {};
+        document.getElementById('cloudDot').className = 'dot ' + (cloud.enabled ? 'ok' : 'warn');
+        document.getElementById('cloudState').textContent = cloud.enabled ? '已开启' : (cloud.configured ? '已关闭' : '未配置');
+        document.getElementById('checkDot').className = 'dot ' + (health.running ? 'warn' : 'ok');
+        document.getElementById('checkState').textContent = health.running ? '正在巡检' : (health.lastRun ? '上次 ' + new Date(health.lastRun).toLocaleString('zh-CN') : '等待首次巡检');
+        document.getElementById('uptime').textContent = duration(data.uptime);
+        document.getElementById('androidState').textContent = data.android && data.android.available ? '可下载 v' + data.android.version : '未生成';
+        document.getElementById('updated').textContent = new Date(data.time).toLocaleString('zh-CN');
+    } catch (error) {
+        document.getElementById('hero').classList.add('bad');
+        document.getElementById('heroTitle').textContent = '无法连接服务';
+        document.getElementById('heroText').textContent = '请检查服务是否启动，或稍后重试';
+        document.getElementById('checkDot').className = 'dot bad';
+        document.getElementById('checkState').textContent = '连接失败';
+    }
+}
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

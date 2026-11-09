@@ -26,6 +26,8 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       # 和下面的 pansou 服务在同一个 compose 网络里
       - PANSOU_URL=http://pansou:8888
+      - HEALTH_CHECK=${HEALTH_CHECK:-1}
+      - BACKUP_DIR=/app/data/backups
     depends_on:
       - pansou
     healthcheck:

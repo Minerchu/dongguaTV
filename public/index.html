@@ -120,6 +120,47 @@
         </div>
 
         <div v-if="!searched">
+            <!-- 继续观看 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="continueWatching.length > 0">
+                <div class="section-header">
+                    <div class="section-line"></div>
+                    <div class="section-title"><i class="fas fa-clock-rotate-left"></i> 继续观看</div>
+                </div>
+                <div class="hot-row library-row">
+                    <div class="hot-card library-card" v-for="entry in continueWatching" :key="'history-' + entry.key" @click="resumeWatch(entry)">
+                        <div class="poster-wrap">
+                            <img v-if="entry.pic" :src="entry.pic" referrerpolicy="no-referrer" loading="lazy">
+                            <div v-else class="poster-fallback"><i class="fas fa-film"></i></div>
+                            <div class="history-progress"><span :style="{ width: entry.percent + '%' }"></span></div>
+                            <div class="rating-badge history-badge">{{ entry.episodeName || '继续播放' }}</div>
+                        </div>
+                        <div class="movie-name">{{ entry.name }}</div>
+                        <div class="movie-date">{{ entry.site_name }} · 已看 {{ entry.percent }}%</div>
+                        <button class="library-remove" @click.stop="removeHistory(entry.key)" title="从继续观看移除"><i class="fas fa-xmark"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 我的收藏 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="favorites.length > 0">
+                <div class="section-header">
+                    <div class="section-line"></div>
+                    <div class="section-title"><i class="fas fa-heart"></i> 我的收藏</div>
+                </div>
+                <div class="hot-row library-row">
+                    <div class="hot-card library-card" v-for="entry in favorites" :key="'favorite-' + entry.key" @click="resumeWatch(entry)">
+                        <div class="poster-wrap">
+                            <img v-if="entry.pic" :src="entry.pic" referrerpolicy="no-referrer" loading="lazy">
+                            <div v-else class="poster-fallback"><i class="fas fa-film"></i></div>
+                            <div class="rating-badge history-badge"><i class="fas fa-heart"></i> 收藏</div>
+                        </div>
+                        <div class="movie-name">{{ entry.name }}</div>
+                        <div class="movie-date">{{ entry.site_name || '已收藏' }}</div>
+                        <button class="library-remove" @click.stop="removeFavorite(entry.key)" title="取消收藏"><i class="fas fa-xmark"></i></button>
+                    </div>
+                </div>
+            </div>
+
             <!-- 3. TMDb Movies -->
             <div class="section-container animate__animated animate__fadeInUp" v-if="movieList.length > 0">
                 <div class="section-header">
@@ -319,13 +360,14 @@
                     <i class="fas fa-cloud"></i> 网盘资源 <span class="tab-count">{{ cloudLoading ? '...' : cloudResults.length }}</span>
                 </button>
             </div>
+            <div v-if="searchNotice && !loading" class="search-notice"><i class="fas fa-circle-info"></i> {{ searchNotice }}</div>
 
             <div v-if="loading" class="text-center py-5">
                 <div class="spinner-border text-danger"></div>
             </div>
 
             <div class="result-grid" v-if="!loading && activeTab === 'video'">
-                <div class="result-card" v-for="group in groupedList" :key="group.name" @click="openSearchResult(group)">
+                <div class="result-card" v-for="group in groupedList" :key="group.key || group.name" @click="openSearchResult(group)">
                     <div class="poster-wrap">
                         <img v-if="!isFallback(group.name)" :src="finalPoster(group)" :key="finalPoster(group)"
                             referrerpolicy="no-referrer" @error="handleImgError(group.name)" loading="lazy">
@@ -334,9 +376,10 @@
                             <div style="font-size:12px; color:#999">{{ group.name }}</div>
                         </div>
                         <div class="rating-badge" style="background:var(--accent); color:#fff; border:none;">{{
-                            group.sources.length }} 源</div>
+                            group.siteCount || group.sources.length }} 站</div>
                     </div>
                     <div class="movie-name">{{ group.name }}</div>
+                    <div class="result-meta">{{ group.sourceCount || group.sources.length }} 条线路<span v-if="group.year"> · {{ group.year }}</span></div>
                 </div>
             </div>
 
@@ -354,8 +397,15 @@
                 <div v-else-if="cloudResults.length === 0" class="cloud-empty">
                     {{ cloudMessage || '未找到网盘资源，换个关键词试试' }}
                 </div>
-                <div v-else class="cloud-list">
-                    <div class="cloud-item" v-for="(item, idx) in cloudResults" :key="idx">
+                <div v-else>
+                <div class="cloud-filters" v-if="cloudResults.length">
+                    <button class="cloud-filter" :class="{ active: cloudFilter === 'all' }" @click="cloudFilter = 'all'">全部 {{ cloudResults.length }}</button>
+                    <button class="cloud-filter" v-for="(count, type) in cloudTypes" :key="type" :class="{ active: cloudFilter === type }" @click="cloudFilter = type">
+                        {{ diskLabel(type) }} {{ count }}
+                    </button>
+                </div>
+                <div class="cloud-list">
+                    <div class="cloud-item" v-for="(item, idx) in filteredCloudResults" :key="idx">
                         <div class="cloud-head">
                             <span class="disk-badge" :class="'disk-' + item.type">{{ diskLabel(item.type) }}</span>
                             <div class="cloud-title" :title="item.title">{{ item.title }}</div>
@@ -376,12 +426,13 @@
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
         </div>
 
         <div class="footer">
             <div>kk爱吃王哥呆阿龟头 设计编写</div>
-            <div style="font-size:10px; margin-top:5px; opacity:0.5;">Data provided by TMDb & Maccms APIs</div>
+            <div style="font-size:10px; margin-top:5px; opacity:0.5;">Data provided by TMDb &amp; Maccms APIs · <a href="/status" class="footer-link">服务状态</a></div>
         </div>
 
         <!-- ★★★ 播放详情页 (影院布局) ★★★ -->
@@ -398,14 +449,21 @@
                             正在播放: <span class="text-white fw-bold">{{ currentSource?.site_name }}</span>
                         </div>
                     </div>
-                    <button class="btn-cast" @click="castVideo">
-                        <i class="fas fa-tv"></i> 一键投屏
-                    </button>
+                    <div class="video-header-actions">
+                        <button class="btn-cast" :class="{ 'btn-cast-active': favoriteActive }" @click="toggleFavorite">
+                            <i class="fas" :class="favoriteActive ? 'fa-heart' : 'fa-heart-circle-plus'"></i>
+                            {{ favoriteActive ? '已收藏' : '收藏' }}
+                        </button>
+                        <button class="btn-cast" @click="castVideo">
+                            <i class="fas fa-tv"></i> 一键投屏
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 2. 中部：超大播放器 -->
                 <div class="player-box">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
+                    <div v-if="playerNotice" class="player-notice">{{ playerNotice }}</div>
                 </div>
 
                 <!-- 3. 底部：控制面板 -->
@@ -430,8 +488,8 @@
                         <div v-if="loadingDetail" class="text-center py-5 text-muted"><i
                                 class="fas fa-spinner fa-spin"></i> 加载中...</div>
                         <div v-else class="ep-grid">
-                            <div v-for="ep in episodeList" class="ep-btn" :class="{ active: currentUrl === ep.url }"
-                                @click="play(ep.url)">
+                            <div v-for="(ep, index) in episodeList" class="ep-btn" :class="{ active: currentEpisodeIndex === index }"
+                                @click="play(ep.url, ep, index)">
                                 {{ ep.name }}
                             </div>
                         </div>
@@ -737,7 +795,7 @@
         createApp({
             data() {
                 return {
-                    keyword: '', loading: false, searched: false, rawList: [],
+                    keyword: '', loading: false, searched: false, rawList: [], searchGroups: [], searchNotice: '',
                     movieList: [], tvList: [], list_cn: [], list_krjp: [], list_hktw: [],
                     nowPlayingList: [], topRatedList: [], airingTodayList: [],
                     showDetail: false, currentGroup: null, currentSource: null,
@@ -745,14 +803,18 @@
                     imageMap: {}, fallbackMap: {}, heroList: [], heroIndex: 0, scrollY: 0,
                     hotList: [],
                     activeTab: 'video', cloudEnabled: false, cloudLoading: false,
-                    cloudResults: [], cloudMessage: '', cloudError: '',
+                    cloudResults: [], cloudMessage: '', cloudError: '', cloudTypes: {}, cloudFilter: 'all',
                     tmdbOpen: false, tmdbLoading: false, tmdbError: '', tmdbInfo: null, tmdbType: 'movie', tmdbLogo: '',
                     tmdbCast: [], tmdbCrew: [], tmdbTrailer: null, tmdbRecommendations: [],
                     tmdbProviderMap: {}, tmdbProviders: null, tmdbRegion: detectTmdbRegion(),
                     tmdbRegionOptions: TMDB_REGION_OPTIONS, tmdbRequestSeq: 0,
                     tmdbAgeRating: '', tmdbKeywords: [], tmdbCollectionParts: [],
                     tmdbSearchGroup: null, tmdbReturnRoute: '/', tmdbSearchSeq: 0,
-                    androidApp: null
+                    androidApp: null,
+                    watchHistory: [], favorites: [], currentEpisode: null, currentEpisodeIndex: -1,
+                    currentProgress: 0, currentDuration: 0, playerNotice: '',
+                    failedSources: [], playFailoverCount: 0, pendingResume: null, pendingSeek: 0,
+                    suppressPlayerErrorUntil: 0, lastHistorySave: 0, noticeTimer: null
                 }
             },
             mounted() {
@@ -767,6 +829,7 @@
                 this.fetchHero();
                 this.fetchAllLists();
                 this.fetchConfig();
+                this.loadLibrary();
                 this.applyRoute();
                 
                 // 初始化热榜滑动功能
@@ -780,6 +843,9 @@
             },
             computed: {
                 groupedList() {
+                    if (Array.isArray(this.searchGroups) && this.searchGroups.length) {
+                        return this.searchGroups;
+                    }
                     const groups = {};
                     this.rawList.forEach(item => {
                         const name = item.vod_name;
@@ -793,7 +859,22 @@
                             latency: item.latency || 999
                         });
                     });
-                    return Object.values(groups).sort((a, b) => b.sources.length - a.sources.length);
+                    return Object.values(groups).map(group => Object.assign(group, {
+                        siteCount: new Set(group.sources.map(item => item.site_key)).size,
+                        sourceCount: group.sources.length
+                    })).sort((a, b) => b.sources.length - a.sources.length);
+                },
+                continueWatching() {
+                    return this.watchHistory.filter(item => !item.finished).slice(0, 12);
+                },
+                filteredCloudResults() {
+                    if (this.cloudFilter === 'all') return this.cloudResults;
+                    return this.cloudResults.filter(item => item.type === this.cloudFilter);
+                },
+                favoriteActive() {
+                    if (!this.currentGroup) return false;
+                    const key = this.favoriteKey(this.currentGroup);
+                    return this.favorites.some(item => item.key === key);
                 },
                 tmdbProviderRows() {
                     const providers = this.tmdbProviders || {};
@@ -1208,12 +1289,14 @@
                 searchRoute() {
                     return this.keyword ? '/search?wd=' + encodeURIComponent(this.keyword) : '/';
                 },
-                watchRoute(group, source) {
+                watchRoute(group, source, episodeIndex, progress) {
                     const params = new URLSearchParams({
                         name: (group && group.name) || (source && source.vod_name) || '影片',
                         site: (source && source.site_key) || '',
                         id: String((source && source.vod_id) || '')
                     });
+                    if (Number.isInteger(episodeIndex) && episodeIndex > 0) params.set('ep', String(episodeIndex));
+                    if (Number(progress) > 5) params.set('t', String(Math.floor(Number(progress))));
                     return '/watch?' + params.toString();
                 },
                 applyRoute() {
@@ -1247,7 +1330,12 @@
                                 name,
                                 pic: '',
                                 sources: [{ site_key: site, vod_id: id, vod_name: name, latency: 999 }]
-                            }, false);
+                            }, false, {
+                                site_key: site,
+                                vod_id: id,
+                                episodeIndex: Math.max(0, Number(params.get('ep')) || 0),
+                                progress: Math.max(0, Number(params.get('t')) || 0)
+                            });
                         } else {
                             setAppRoute('/');
                             this.clearSearch(false);
@@ -1272,8 +1360,12 @@
                     this.searched = false;
                     this.keyword = '';
                     this.rawList = [];
+                    this.searchGroups = [];
+                    this.searchNotice = '';
                     this.activeTab = 'video';
                     this.cloudResults = [];
+                    this.cloudTypes = {};
+                    this.cloudFilter = 'all';
                     this.cloudError = '';
                     if (updateRoute !== false) {
                         setAppRoute('/');
@@ -1295,8 +1387,12 @@
                     this.loading = true;
                     this.searched = true;
                     this.rawList = [];
+                    this.searchGroups = [];
+                    this.searchNotice = '';
                     this.activeTab = 'video';
                     this.cloudResults = [];
+                    this.cloudTypes = {};
+                    this.cloudFilter = 'all';
                     this.cloudMessage = '';
                     this.cloudError = '';
                     this.cloudLoading = this.cloudEnabled;
@@ -1306,6 +1402,8 @@
                         const res = await fetch(`/api/search?wd=${encodeURIComponent(kw)}`);
                         const data = await res.json();
                         this.rawList = data.list || [];
+                        this.searchGroups = Array.isArray(data.groups) ? data.groups : [];
+                        if (data.cooling > 0) this.searchNotice = data.cooling + ' 个连续失败的站点正在冷却，暂时没有参与本次搜索';
                         this.rawList.forEach(item => {
                             if (!item.vod_pic || item.vod_pic.includes('mac_default')) this.handleImgError(item.vod_name);
                         });
@@ -1322,6 +1420,7 @@
                             this.cloudEnabled = false;
                         } else {
                             this.cloudResults = data.list || [];
+                            this.cloudTypes = data.types && typeof data.types === 'object' ? data.types : {};
                             this.cloudMessage = data.message || '';
                             this.cloudError = data.error || '';
                         }
@@ -1357,57 +1456,320 @@
                         prompt('请手动复制', text);
                     }
                 },
-                openDetail(group, updateRoute = true) {
+                libraryKey(source) {
+                    if (!source) return '';
+                    return String(source.site_key || '') + ':' + String(source.vod_id || '');
+                },
+                favoriteKey(group) {
+                    if (!group) return '';
+                    return 'movie:' + String(group.name || '') + '|' + String(group.year || '');
+                },
+                loadLibrary() {
+                    const read = (key) => {
+                        try {
+                            const value = JSON.parse(localStorage.getItem(key) || '[]');
+                            return Array.isArray(value) ? value.filter(item => item && item.key) : [];
+                        } catch (e) { return []; }
+                    };
+                    this.watchHistory = read('dg_watch_history_v1');
+                    this.favorites = read('dg_favorites_v1');
+                },
+                saveLibrary() {
+                    try {
+                        localStorage.setItem('dg_watch_history_v1', JSON.stringify(this.watchHistory.slice(0, 40)));
+                        localStorage.setItem('dg_favorites_v1', JSON.stringify(this.favorites.slice(0, 80)));
+                    } catch (e) { }
+                },
+                libraryEntry(source, extra) {
+                    const group = this.currentGroup || {};
+                    const sources = Array.isArray(group.sources) ? group.sources.slice(0, 12).map(item => ({
+                        site_key: item.site_key,
+                        site_name: item.site_name || item.site_key,
+                        vod_id: item.vod_id,
+                        vod_name: item.vod_name || group.name,
+                        vod_pic: item.vod_pic || group.pic || '',
+                        latency: item.latency
+                    })) : [];
+                    return Object.assign({
+                        key: this.libraryKey(source),
+                        name: group.name || source.vod_name || '影片',
+                        pic: group.pic || source.vod_pic || '',
+                        site_key: source.site_key,
+                        site_name: source.site_name || source.site_key || '',
+                        vod_id: source.vod_id,
+                        vod_name: group.name || source.vod_name || '影片',
+                        sources,
+                        updatedAt: Date.now()
+                    }, extra || {});
+                },
+                recordHistory(progress, duration) {
+                    if (!this.currentGroup || !this.currentSource) return;
+                    const position = Math.max(0, Number(progress) || 0);
+                    const rawDuration = Number(duration);
+                    const total = Number.isFinite(rawDuration) ? Math.max(0, rawDuration) : 0;
+                    if (position < 4 && total <= 0) return;
+                    const percent = total > 0 ? Math.max(0, Math.min(100, Math.round(position / total * 100))) : 0;
+                    const entry = this.libraryEntry(this.currentSource, {
+                        episodeIndex: Math.max(0, this.currentEpisodeIndex),
+                        episodeName: this.currentEpisode ? this.currentEpisode.name : '正片',
+                        progress: position,
+                        duration: total,
+                        percent,
+                        finished: total > 0 && position / total >= 0.95
+                    });
+                    const index = this.watchHistory.findIndex(item => item.key === entry.key);
+                    if (index >= 0) this.watchHistory.splice(index, 1);
+                    this.watchHistory.unshift(entry);
+                    this.watchHistory = this.watchHistory.slice(0, 40);
+                    this.saveLibrary();
+                },
+                removeHistory(key) {
+                    this.watchHistory = this.watchHistory.filter(item => item.key !== key);
+                    this.saveLibrary();
+                },
+                removeFavorite(key) {
+                    this.favorites = this.favorites.filter(item => item.key !== key);
+                    this.saveLibrary();
+                },
+                toggleFavorite() {
+                    if (!this.currentGroup || !this.currentSource) return;
+                    const key = this.favoriteKey(this.currentGroup);
+                    const index = this.favorites.findIndex(item => item.key === key);
+                    if (index >= 0) {
+                        this.favorites.splice(index, 1);
+                        this.notifyPlayer('已取消收藏');
+                    } else {
+                        const entry = this.libraryEntry(this.currentSource, {
+                            episodeIndex: Math.max(0, this.currentEpisodeIndex),
+                            episodeName: this.currentEpisode ? this.currentEpisode.name : ''
+                        });
+                        entry.key = key;
+                        this.favorites.unshift(entry);
+                        this.favorites = this.favorites.slice(0, 80);
+                        this.notifyPlayer('已加入收藏');
+                    }
+                    this.saveLibrary();
+                },
+                resumeWatch(entry) {
+                    if (!entry || !entry.site_key || !entry.vod_id) return;
+                    const stored = Array.isArray(entry.sources) ? entry.sources.filter(item => item && item.site_key && item.vod_id) : [];
+                    const sources = stored.length ? stored : [{
+                        site_key: entry.site_key,
+                        site_name: entry.site_name || entry.site_key,
+                        vod_id: entry.vod_id,
+                        vod_name: entry.name || entry.vod_name || '影片',
+                        vod_pic: entry.pic || '',
+                        latency: 999
+                    }];
+                    const source = sources[0];
+                    const group = {
+                        name: entry.name || entry.vod_name || '影片',
+                        pic: entry.pic || '',
+                        year: entry.year || '',
+                        siteCount: new Set(sources.map(item => item.site_key)).size,
+                        sourceCount: sources.length,
+                        sources
+                    };
+                    if (this.tmdbOpen) this.closeTmdb(false);
+                    this.openDetail(group, true, {
+                        site_key: source.site_key,
+                        vod_id: source.vod_id,
+                        episodeIndex: Math.max(0, Number(entry.episodeIndex) || 0),
+                        progress: Math.max(0, Number(entry.progress) || 0)
+                    });
+                },
+                openDetail(group, updateRoute = true, resume = null) {
                     if (!group || !Array.isArray(group.sources) || !group.sources.length) return;
                     this.currentGroup = group;
                     this.showDetail = true;
+                    this.pendingResume = resume || null;
+                    this.failedSources = [];
+                    this.playFailoverCount = 0;
                     this.currentGroup.sources.forEach(source => {
-                        source.latency = '...';
+                        if (!Number.isFinite(Number(source.latency)) || Number(source.latency) <= 0) source.latency = 999;
                         fetch(`/api/check?key=${source.site_key}`)
                             .then(res => res.json())
-                            .then(data => { source.latency = data.latency; });
+                            .then(data => { if (data.ok) source.latency = data.latency; });
                     });
-                    let best = group.sources[0];
-                    this.switchSource(best);
-                    if (updateRoute !== false) setAppRoute(this.watchRoute(group, best));
+                    const best = (resume && group.sources.find(source => source.site_key === resume.site_key)) || group.sources[0];
+                    this.switchSource(best, { auto: true, resume });
+                    if (updateRoute !== false) {
+                        setAppRoute(this.watchRoute(group, best, resume && resume.episodeIndex, resume && resume.progress));
+                    }
                 },
                 closeDetail(updateRoute = true) {
+                    if (dp && dp.video) this.recordHistory(dp.video.currentTime, dp.video.duration);
                     this.showDetail = false;
+                    this.playerNotice = '';
                     if (dp) dp.pause();
                     if (updateRoute !== false) setAppRoute(this.searchRoute());
                 },
-                async switchSource(source) {
-                    this.currentSource = source; this.loadingDetail = true; this.episodeList = [];
+                async switchSource(source, options = {}) {
+                    if (!source) return;
+                    if (!options.auto) {
+                        this.failedSources = [];
+                        this.playFailoverCount = 0;
+                    }
+                    this.currentSource = source;
+                    this.loadingDetail = true;
+                    this.episodeList = [];
+                    const resume = options.resume || null;
                     if (this.showDetail && this.currentGroup) {
-                        setAppRoute(this.watchRoute(this.currentGroup, source), true);
+                        setAppRoute(this.watchRoute(this.currentGroup, source, resume && resume.episodeIndex, resume && resume.progress), true);
                     }
                     try {
-                        const res = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`);
+                        const res = await fetch(`/api/detail?site_key=${encodeURIComponent(source.site_key)}&id=${encodeURIComponent(source.vod_id)}`);
                         const data = await res.json();
-                        if (data.list && data.list.length > 0) this.parseEpisodes(data.list[0].vod_play_url);
-                    } catch (e) { }
+                        if (data.list && data.list.length > 0 && data.list[0].vod_play_url) {
+                            if (data.list[0].vod_name && this.currentGroup) this.currentGroup.name = data.list[0].vod_name;
+                            if (data.list[0].vod_pic && this.currentGroup) this.currentGroup.pic = data.list[0].vod_pic;
+                            this.parseEpisodes(data.list[0].vod_play_url, resume);
+                        } else {
+                            this.notifyPlayer('这个站点没有返回可播放的剧集');
+                        }
+                    } catch (e) {
+                        this.notifyPlayer('线路详情加载失败');
+                    }
                     this.loadingDetail = false;
                 },
-                parseEpisodes(urlStr) {
-                    let playSource = urlStr;
-                    if (urlStr.includes('$$$')) {
-                        const sets = urlStr.split('$$$');
+                parseEpisodes(urlStr, resume) {
+                    let playSource = String(urlStr || '');
+                    if (!playSource) { this.episodeList = []; return; }
+                    if (playSource.includes('$$$')) {
+                        const sets = playSource.split('$$$');
                         playSource = sets.find(s => s.toLowerCase().includes('m3u8')) || sets[0];
                     }
-                    this.episodeList = playSource.split('#').map(ep => {
+                    const episodes = playSource.split('#').map((ep, index) => {
                         const p = ep.split('$');
-                        return { name: p.length > 1 ? p[0] : '正片', url: p.length > 1 ? p[1] : p[0] };
+                        let value = String(p.length > 1 ? p[1] : p[0] || '').trim();
+                        if (value.startsWith('//')) value = 'https:' + value;
+                        return {
+                            name: p.length > 1 ? (p[0] || ('第 ' + (index + 1) + ' 集')) : '正片',
+                            url: value
+                        };
+                    }).filter(ep => ep.url && /^https?:\/\//i.test(ep.url));
+                    this.episodeList = episodes;
+                    if (!episodes.length) {
+                        this.notifyPlayer('没有找到可直接播放的地址');
+                        return;
+                    }
+                    const requested = Math.max(0, Number(resume && resume.episodeIndex) || 0);
+                    const index = Math.min(requested, episodes.length - 1);
+                    this.play(episodes[index].url, episodes[index], index, {
+                        progress: resume && resume.progress,
+                        auto: true
                     });
-                    if (this.episodeList.length > 0) this.play(this.episodeList[0].url);
                 },
-                play(url) {
+                proxyUrl(url) {
+                    const value = String(url || '').trim();
+                    if (!value || !/^https?:\/\//i.test(value)) return value;
+                    let proxy = '/api/play/proxy?url=' + encodeURIComponent(value);
+                    if (this.currentSource && this.currentSource.site_key) proxy += '&site=' + encodeURIComponent(this.currentSource.site_key);
+                    return proxy;
+                },
+                bindPlayerEvents() {
+                    if (!dp || dp.__dgEventsBound) return;
+                    dp.__dgEventsBound = true;
+                    const fail = () => this.handlePlaybackError();
+                    if (typeof dp.on === 'function') {
+                        dp.on('error', fail);
+                        dp.on('timeupdate', () => this.onPlayerProgress());
+                        dp.on('ended', () => this.onPlayerEnded());
+                    }
+                    if (dp.video) {
+                        dp.video.addEventListener('error', fail);
+                        dp.video.addEventListener('timeupdate', () => this.onPlayerProgress());
+                        dp.video.addEventListener('ended', () => this.onPlayerEnded());
+                    }
+                },
+                play(url, episode, index, options = {}) {
+                    if (!url) return;
+                    if (!options.auto) {
+                        this.failedSources = [];
+                        this.playFailoverCount = 0;
+                    }
                     this.currentUrl = url;
-                    if (!dp) dp = new DPlayer({
-                        container: document.getElementById('dplayer'),
-                        theme: '#e50914', video: { url: url, type: 'hls' }
+                    this.currentEpisode = episode || { name: '正片', url };
+                    this.currentEpisodeIndex = Number.isInteger(index) ? index : 0;
+                    this.pendingSeek = Math.max(0, Number(options.progress) || 0);
+                    this.currentProgress = this.pendingSeek;
+                    this.currentDuration = 0;
+                    const isHls = /\.m3u8(?:$|\?)/i.test(url) || /\/m3u8\//i.test(url);
+                    const proxied = this.proxyUrl(url);
+                    const video = { url: proxied, type: isHls ? 'hls' : 'normal' };
+                    this.suppressPlayerErrorUntil = Date.now() + 1500;
+                    if (!dp) {
+                        dp = new DPlayer({
+                            container: document.getElementById('dplayer'),
+                            theme: '#e50914',
+                            video
+                        });
+                    } else {
+                        dp.switchVideo(video);
+                    }
+                    this.bindPlayerEvents();
+                    try { dp.play(); } catch (e) { }
+                    if (this.pendingSeek > 4) {
+                        const seek = () => {
+                            try {
+                                if (dp && dp.video && dp.video.readyState >= 1 && this.pendingSeek > 0) {
+                                    dp.video.currentTime = this.pendingSeek;
+                                    this.pendingSeek = 0;
+                                }
+                            } catch (e) { }
+                        };
+                        setTimeout(seek, 700);
+                        setTimeout(seek, 1900);
+                    }
+                    if (this.showDetail && this.currentGroup && this.currentSource) {
+                        setAppRoute(this.watchRoute(this.currentGroup, this.currentSource, this.currentEpisodeIndex, this.pendingSeek), true);
+                    }
+                },
+                onPlayerProgress() {
+                    if (!dp || !dp.video) return;
+                    const position = Number(dp.video.currentTime) || 0;
+                    const duration = Number(dp.video.duration) || 0;
+                    this.currentProgress = position;
+                    this.currentDuration = duration;
+                    if (position > 3 && Date.now() - this.lastHistorySave > 4000) {
+                        this.lastHistorySave = Date.now();
+                        this.recordHistory(position, duration);
+                    }
+                },
+                onPlayerEnded() {
+                    if (!dp || !dp.video) return;
+                    this.recordHistory(dp.video.duration || 0, dp.video.duration || 0);
+                },
+                notifyPlayer(message) {
+                    this.playerNotice = String(message || '');
+                    if (this.noticeTimer) clearTimeout(this.noticeTimer);
+                    this.noticeTimer = setTimeout(() => { this.playerNotice = ''; }, 4200);
+                },
+                handlePlaybackError() {
+                    if (!this.currentGroup || !this.currentSource) return;
+                    if (Date.now() < this.suppressPlayerErrorUntil) return;
+                    if (!this.failedSources.includes(this.currentSource.site_key)) this.failedSources.push(this.currentSource.site_key);
+                    if (this.playFailoverCount >= 3) {
+                        this.notifyPlayer('连续切换 3 条线路仍无法播放，请手动选择其他结果');
+                        return;
+                    }
+                    const next = this.currentGroup.sources.find(source => !this.failedSources.includes(source.site_key));
+                    if (!next) {
+                        this.notifyPlayer('当前结果的所有线路都播放失败，请换一个搜索结果');
+                        return;
+                    }
+                    this.playFailoverCount++;
+                    this.notifyPlayer('当前线路播放失败，正在切换到「' + (next.site_name || next.site_key) + '」');
+                    this.suppressPlayerErrorUntil = Date.now() + 1800;
+                    this.switchSource(next, {
+                        auto: true,
+                        resume: {
+                            site_key: next.site_key,
+                            vod_id: next.vod_id,
+                            episodeIndex: Math.max(0, this.currentEpisodeIndex),
+                            progress: Math.max(0, this.currentProgress)
+                        }
                     });
-                    else dp.switchVideo({ url: url, type: 'hls' });
-                    dp.play();
                 },
                 
                 // 热榜左右滚动功能

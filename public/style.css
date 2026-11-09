@@ -965,6 +965,35 @@ body {
 /* ===== 网盘资源列表 ===== */
 .cloud-panel { margin-top: 4px; }
 
+.cloud-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 14px;
+}
+
+.cloud-filter {
+    border: 1px solid var(--border);
+    background: transparent;
+    color: #aaa;
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: .18s;
+}
+
+.cloud-filter:hover {
+    color: #fff;
+    border-color: #666;
+}
+
+.cloud-filter.active {
+    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
 .cloud-list {
     display: flex;
     flex-direction: column;
@@ -1716,4 +1745,148 @@ body.tmdb-open {
     .android-download-copy strong { font-size: 13px; }
     .android-download-copy span { font-size: 10.5px; }
     .android-download-btn { padding: 9px 12px; font-size: 11px; }
+}
+
+/* 搜索结果聚合 */
+.result-meta {
+    margin-top: 3px;
+    text-align: center;
+    color: #777;
+    font-size: 11px;
+}
+
+.search-notice {
+    margin: 2px 0 18px;
+    padding: 9px 13px;
+    border-radius: 8px;
+    color: #b9b9b9;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    font-size: 12.5px;
+}
+
+/* 继续观看与收藏 */
+.library-row {
+    align-items: stretch;
+}
+
+.library-card {
+    padding-bottom: 4px;
+}
+
+.library-card .poster-wrap {
+    overflow: visible;
+}
+
+.library-card .poster-wrap img,
+.library-card .poster-fallback {
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.history-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+    z-index: 4;
+}
+
+.history-progress span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+}
+
+.history-badge {
+    top: auto;
+    right: auto;
+    bottom: 9px;
+    left: 6px;
+    max-width: calc(100% - 12px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.78);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.library-remove {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 6;
+    width: 25px;
+    height: 25px;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.72);
+    opacity: 0;
+    transition: 0.18s;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.library-card:hover .library-remove {
+    opacity: 1;
+}
+
+/* 播放页新增控件 */
+.video-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.btn-cast-active {
+    color: #ff6b74;
+    border-color: rgba(229, 9, 20, 0.55);
+    background: rgba(229, 9, 20, 0.16);
+}
+
+.player-box {
+    position: relative;
+}
+
+.player-notice {
+    position: absolute;
+    left: 50%;
+    bottom: 22px;
+    z-index: 8;
+    transform: translateX(-50%);
+    max-width: min(92%, 560px);
+    padding: 9px 15px;
+    border-radius: 999px;
+    color: #fff;
+    background: rgba(10, 10, 10, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    font-size: 13px;
+    text-align: center;
+    pointer-events: none;
+}
+
+.footer-link {
+    color: #777;
+    text-decoration: none;
+}
+
+.footer-link:hover {
+    color: #bbb;
+}
+
+@media (max-width: 640px) {
+    .library-card {
+        min-width: 126px;
+        width: 126px;
+    }
+    .library-remove {
+        opacity: 1;
+    }
 }

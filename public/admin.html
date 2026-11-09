@@ -76,6 +76,7 @@
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='import'}" @click="tab='import'"><i class="fas fa-file-import me-1"></i>导入采集源</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='cloud'}" @click="tab='cloud'"><i class="fas fa-cloud me-1"></i>网盘搜索</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='client'}" @click="openClientTab"><i class="fab fa-android me-1"></i>Android 客户端</button></li>
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='backup'}" @click="openBackupTab"><i class="fas fa-box-archive me-1"></i>备份与恢复</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='guide'}" @click="tab='guide'"><i class="fas fa-circle-question me-1"></i>使用教程</button></li>
         </ul>
 
@@ -116,9 +117,11 @@
                 <div class="small text-muted">
                     共 {{ sites.length }} 个，启用 {{ activeCount }} 个（地址只保存在本站 db.json，不会进 Git 仓库）
                     <span v-if="testingAll" class="ms-2"><i class="fas fa-spinner fa-spin"></i> 正在测速...</span>
+                    <span v-if="healthLastRun" class="ms-2 text-muted">· 上次巡检 {{ formatDateTime(healthLastRun) }}</span>
                 </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-outline-secondary btn-sm" :disabled="testingAll" @click="testAll"><i class="fas fa-gauge-high me-1"></i>全部测速</button>
+                    <button class="btn btn-outline-success btn-sm" :disabled="healthRunning" @click="checkHealthAll"><i class="fas fa-heart-pulse me-1"></i>{{ healthRunning ? '巡检中...' : '自动巡检' }}</button>
                     <button class="btn btn-outline-secondary btn-sm" @click="exportSites"><i class="fas fa-download me-1"></i>导出</button>
                 </div>
             </div>
@@ -128,7 +131,7 @@
                     <table class="table table-hover mb-0 align-middle">
                         <thead class="table-light">
                             <tr>
-                                <th style="width:90px">状态</th>
+                                <th style="width:126px">状态</th>
                                 <th style="width:170px">名称</th>
                                 <th style="width:120px">标识</th>
                                 <th>API 地址</th>
@@ -139,11 +142,20 @@
                         <tbody>
                             <tr v-for="site in sites" :key="site.key" class="site-row">
                                 <td>
-                                    <span v-if="status[site.key]" class="small" :class="status[site.key].ok ? 'ok' : 'bad'">
+                                    <span v-if="status[site.key] && status[site.key].loading" class="small text-muted"><i class="fas fa-spinner fa-spin"></i></span>
+                                    <span v-else-if="status[site.key]" class="small" :class="status[site.key].ok ? 'ok' : 'bad'">
                                         <i class="fas" :class="status[site.key].ok ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
                                         {{ status[site.key].ok ? (status[site.key].latency + 'ms') : '不可用' }}
                                     </span>
-                                    <span v-else class="text-muted small">未测试</span>
+                                    <span v-else-if="site.health && site.health.cooling" class="small text-warning">
+                                        <i class="fas fa-snowflake"></i> 冷却 {{ Math.ceil(site.health.cooldownSeconds / 60) }} 分
+                                    </span>
+                                    <span v-else-if="site.health && site.health.lastCheck" class="small" :class="site.health.ok ? 'ok' : 'bad'">
+                                        <i class="fas" :class="site.health.ok ? 'fa-circle-check' : 'fa-circle-xmark'"></i>
+                                        {{ site.health.ok ? (site.health.latency + 'ms') : '失败' }}
+                                        <span class="text-muted">· {{ site.health.successCount }}/{{ site.health.successCount + site.health.failCount }}</span>
+                                    </span>
+                                    <span v-else class="text-muted small">未检测</span>
                                 </td>
                                 <td><input class="form-control form-control-sm" v-model="site.name"></td>
                                 <td><input class="form-control form-control-sm mono" v-model="site.key"></td>
@@ -415,6 +427,50 @@
             </div>
         </div>
 
+        <!-- 备份与恢复 -->
+        <div v-show="tab==='backup'">
+            <div class="card p-3 mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div>
+                        <h6 class="mb-1"><i class="fas fa-box-archive text-danger me-1"></i>备份与恢复</h6>
+                        <p class="text-muted small mb-0">备份包含采集站和后台设置。每天自动备份一次，保留最近 7 份；恢复前会再自动备份当前数据。</p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-outline-secondary btn-sm" href="/api/admin/backup"><i class="fas fa-download me-1"></i>下载当前配置</a>
+                        <button class="btn btn-danger btn-sm" :disabled="backupBusy" @click="createBackup"><i class="fas fa-plus me-1"></i>立即备份</button>
+                        <button class="btn btn-outline-danger btn-sm" :disabled="backupBusy" @click="pickRestoreFile"><i class="fas fa-upload me-1"></i>从文件恢复</button>
+                        <input ref="restoreInput" type="file" accept="application/json,.json" class="d-none" @change="restoreFile">
+                    </div>
+                </div>
+                <div v-if="backupMessage" class="alert mt-3 mb-0 py-2 small" :class="backupMessage.ok ? 'alert-success' : 'alert-danger'">{{ backupMessage.text }}</div>
+            </div>
+
+            <div class="card overflow-hidden">
+                <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+                    <strong class="small">历史备份</strong>
+                    <button class="btn btn-outline-secondary btn-sm" :disabled="backupBusy" @click="loadBackups"><i class="fas fa-rotate me-1"></i>刷新</button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light"><tr><th>文件</th><th style="width:110px">大小</th><th style="width:190px">时间</th><th style="width:190px">操作</th></tr></thead>
+                        <tbody>
+                            <tr v-for="item in backups" :key="item.name">
+                                <td class="mono small text-break">{{ item.name }}</td>
+                                <td class="small text-muted">{{ formatSize(item.size) }}</td>
+                                <td class="small text-muted">{{ formatDateTime(item.createdAt) }}</td>
+                                <td class="text-nowrap">
+                                    <button class="btn btn-outline-secondary btn-sm" @click="downloadBackup(item)"><i class="fas fa-download"></i></button>
+                                    <button class="btn btn-outline-danger btn-sm" :disabled="backupBusy" @click="restoreBackup(item)"><i class="fas fa-clock-rotate-left me-1"></i>恢复</button>
+                                </td>
+                            </tr>
+                            <tr v-if="backups.length===0"><td colspan="4" class="text-center text-muted py-5">还没有历史备份</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <p class="text-muted small mt-3 mb-0">手动恢复会覆盖当前采集站和设置。恢复完成后前台搜索缓存会自动清空。</p>
+        </div>
+
         <!-- 教程 -->
         <div v-show="tab==='guide'" class="card p-4">
             <h5 class="mb-4"><i class="fas fa-graduation-cap text-danger me-1"></i>如何找到并添加采集站</h5>
@@ -492,6 +548,34 @@ https://example.com/inc/apijson.php</pre>
                         显示夸克 / 百度 / 阿里 / UC 等分享链接和提取码。
                     </p>
                 </div>
+
+                <div class="step">
+                    <h6>播放代理与自动切源</h6>
+                    <p class="small text-muted mb-2">
+                        前台播放会先经过本站的 <code>/api/play/proxy</code>，由服务器补上 Referer 和浏览器 UA，再重写 m3u8 分片地址。
+                        这样能解决大部分 403、CORS 和分片跨域问题。
+                    </p>
+                    <p class="small text-muted mb-0">
+                        如果当前线路仍然播放失败，播放器会自动尝试同一影片的下一条线路，最多切换 3 次。
+                        代理只允许公网 http/https 地址，内网和本机地址会被拒绝。
+                    </p>
+                </div>
+
+                <div class="step">
+                    <h6>健康巡检</h6>
+                    <p class="small text-muted mb-0">
+                        服务每 10 分钟自动检查一次启用的采集站。连续失败 3 次的站点会临时冷却 5 分钟，之后自动重新参与搜索；
+                        不会永久关闭。后台「采集站管理」会显示延迟、成功率和冷却剩余时间，也可以点「自动巡检」立即检查。
+                    </p>
+                </div>
+
+                <div class="step">
+                    <h6>备份与恢复</h6>
+                    <p class="small text-muted mb-0">
+                        后台「备份与恢复」可以下载当前配置、立即备份、恢复历史备份，或上传之前下载的 JSON。
+                        服务每天自动备份一次，保留最近 7 份，文件在 <code>data/backups/</code>。
+                    </p>
+                </div>
             </div>
 
             <div class="hint mt-2">
@@ -519,10 +603,12 @@ createApp({
             },
             clientSaving: false, clientMessage: null, clientTimer: null,
             status: {}, testingAll: false,
+            healthRunning: false, healthLastRun: 0,
             form: { name: '', api: '' }, formResult: null, adding: false,
             importMode: 'tvbox', tvboxText: '', maccmsText: '', importParsing: false, importImporting: false,
             importCandidates: [], importErrors: [], importStats: null, importMessage: null,
-            pansouResult: null
+            pansouResult: null,
+            backups: [], backupBusy: false, backupMessage: null
         };
     },
     computed: {
@@ -563,6 +649,7 @@ createApp({
             if (data.sites) {
                 this.sites = data.sites.map(s => Object.assign({}, s, { _originalKey: s.key }));
                 this.settings = Object.assign({ pansouUrl: '', pansouToken: '', pansouEnabled: true }, data.settings || {});
+                this.healthLastRun = data.health && data.health.lastRun || 0;
             }
         },
         openClientTab() {
@@ -738,6 +825,48 @@ createApp({
             for (const site of this.sites) await this.testOne(site);
             this.testingAll = false;
         },
+        mergeHealth(list) {
+            const map = new Map((list || []).map(item => [item.key, item]));
+            this.sites.forEach(site => {
+                if (map.has(site.key)) site.health = map.get(site.key);
+            });
+        },
+        async checkHealthOne(site) {
+            if (!site || !site.key) return;
+            this.healthRunning = true;
+            try {
+                const { data } = await this.api('/api/admin/health/check', {
+                    method: 'POST',
+                    body: JSON.stringify({ key: site.key })
+                });
+                if (data.success) {
+                    this.mergeHealth(data.sites);
+                    this.healthLastRun = data.lastRun || this.healthLastRun;
+                }
+            } catch (e) {
+                this.backupMessage = { ok: false, text: e.message };
+            }
+            this.healthRunning = false;
+        },
+        async checkHealthAll() {
+            this.healthRunning = true;
+            this.backupMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/health/check', {
+                    method: 'POST',
+                    body: JSON.stringify({})
+                });
+                if (data.success) {
+                    this.mergeHealth(data.sites);
+                    this.healthLastRun = data.lastRun || this.healthLastRun;
+                    this.status = {};
+                    await this.loadSites();
+                }
+            } catch (e) {
+                alert(e.message || '巡检失败');
+            }
+            this.healthRunning = false;
+        },
         async saveSite(site) {
             if (!site.name || !site.api) return alert('名称和地址不能为空');
             try {
@@ -845,6 +974,86 @@ createApp({
             a.download = 'donggua-sites.json';
             a.click();
             URL.revokeObjectURL(a.href);
+        },
+        openBackupTab() {
+            this.tab = 'backup';
+            this.loadBackups().catch(() => { });
+        },
+        async loadBackups() {
+            const { data } = await this.api('/api/admin/backups');
+            if (data.success) this.backups = data.backups || [];
+        },
+        async createBackup() {
+            this.backupBusy = true;
+            this.backupMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/backups', { method: 'POST' });
+                if (data.success) {
+                    this.backups = data.backups || [];
+                    this.backupMessage = { ok: true, text: '已创建备份：' + data.backup.name };
+                } else {
+                    this.backupMessage = { ok: false, text: data.error || '备份失败' };
+                }
+            } catch (e) {
+                this.backupMessage = { ok: false, text: e.message };
+            }
+            this.backupBusy = false;
+        },
+        downloadBackup(item) {
+            window.location.href = '/api/admin/backups/' + encodeURIComponent(item.name);
+        },
+        async restoreBackup(item) {
+            if (!confirm('确定恢复备份「' + item.name + '」吗？当前采集站和设置会被覆盖。')) return;
+            this.backupBusy = true;
+            this.backupMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/backups/' + encodeURIComponent(item.name) + '/restore', { method: 'POST' });
+                if (data.success) {
+                    this.backupMessage = { ok: true, text: '已恢复，共 ' + data.sites + ' 个采集站' };
+                    await this.loadSites();
+                    await this.loadBackups();
+                } else {
+                    this.backupMessage = { ok: false, text: data.error || '恢复失败' };
+                }
+            } catch (e) {
+                this.backupMessage = { ok: false, text: e.message };
+            }
+            this.backupBusy = false;
+        },
+        pickRestoreFile() {
+            if (this.$refs.restoreInput) this.$refs.restoreInput.click();
+        },
+        async restoreFile(event) {
+            const file = event.target.files && event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) return alert('备份文件不能超过 5MB');
+            let content;
+            try { content = await file.text(); } catch (e) { return alert('无法读取文件'); }
+            if (!confirm('确定用「' + file.name + '」覆盖当前采集站和设置吗？')) return;
+            this.backupBusy = true;
+            this.backupMessage = null;
+            try {
+                const { data } = await this.api('/api/admin/restore', {
+                    method: 'POST',
+                    body: JSON.stringify({ content })
+                });
+                if (data.success) {
+                    this.backupMessage = { ok: true, text: '已从文件恢复，共 ' + data.sites + ' 个采集站' };
+                    await this.loadSites();
+                    await this.loadBackups();
+                } else {
+                    this.backupMessage = { ok: false, text: data.error || '恢复失败' };
+                }
+            } catch (e) {
+                this.backupMessage = { ok: false, text: e.message };
+            }
+            this.backupBusy = false;
+        },
+        formatDateTime(value) {
+            if (!value) return '-';
+            const date = new Date(value);
+            return isNaN(date.getTime()) ? String(value) : date.toLocaleString('zh-CN');
         },
         async saveSettings() {
             try {

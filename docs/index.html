@@ -40,7 +40,7 @@
             <h1>冬瓜TV 部署与使用教程</h1>
             <p>从零开始部署，到后台添加采集站、开启网盘搜索，一步一步来。</p>
             <div class="hero-tags">
-                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>TMDb 同源反代</span><span>Android 原生客户端</span>
+                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>TMDb 同源反代</span><span>Android 原生客户端</span><span>播放代理与自动切源</span><span>健康巡检</span>
             </div>
             <div class="note">
                 本页只是静态教程，不运行任何后端。仓库和正式版本里<strong>不包含任何采集站地址</strong>，
@@ -206,8 +206,15 @@ environment:
             <p>或者临时启动：</p>
 <pre><code>PORT=8080 node server.js</code></pre>
 
-            <h3>5. 用 Nginx 反向代理（可选）</h3>
-            <p>想用域名 + 80/443 访问，可以让 Nginx 转发到 3000：</p>
+            <h3>5. 自带 Caddy HTTPS（推荐）</h3>
+            <p>项目已经带了一份 Caddy 配置，不用自己写反代。先把域名解析到服务器，然后在 <code>.env</code> 里填：</p>
+<pre><code>DOMAIN=tv.example.com</code></pre>
+            <p>用 HTTPS 配置启动：</p>
+<pre><code>docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build</code></pre>
+            <p>Caddy 会自动申请证书、续期，并转发到容器里的 3000 端口。服务器 80 和 443 要保持可用。</p>
+
+            <h3>6. 用 Nginx 反向代理（可选）</h3>
+            <p>不想用自带 Caddy 时，也可以让 Nginx 转发到 3000：</p>
 <pre><code>server {
     listen 80;
     server_name your-domain.com;
@@ -298,6 +305,21 @@ https://example.com/inc/apijson.php</code></pre>
                 添加后的地址只保存在服务器本地的 <code>db.json</code>（已在 <code>.gitignore</code> 中），
                 <strong>不要把自己的 db.json 上传到 GitHub</strong>，也不要截图公开接口地址。
             </div>
+
+            <h3>6. 播放代理与自动切源</h3>
+            <p>前台播放时，浏览器请求的是本站的 <code>/api/play/proxy</code>。服务器会补上源站需要的 Referer 和 UA，
+            再改写 m3u8 里的分片、密钥和子列表地址，解决大部分 403、CORS 和跨域分片问题。</p>
+            <p>当前线路播放失败时，播放器会自动尝试同一影片的下一条线路，最多 3 次。代理只允许公网 http/https，
+            内网、本机和云厂商元数据地址会被拒绝。</p>
+
+            <h3>7. 搜索聚合与健康巡检</h3>
+            <p>同一个片名和年份会合并成一张卡片，显示「X 站 / Y 条线路」，点进去再选站点。
+            服务每 10 分钟检查一次启用的采集站；连续失败 3 次先冷却 5 分钟，之后自动重新参与搜索，不会永久关闭。</p>
+            <p>后台「采集站管理」能看到延迟、成功率和冷却剩余时间，也可以点「自动巡检」立即检查。</p>
+
+            <h3>8. 观看记录和收藏</h3>
+            <p>浏览记录、收藏和继续观看保存在浏览器本地，不上传服务器，也不需要注册账号。
+            清除浏览器数据会一起清掉这些记录。</p>
         </section>
 
         <section id="pansou">
@@ -323,6 +345,7 @@ https://example.com/inc/apijson.php</code></pre>
             <pre><code># 不启动自带的 pansou 服务，把地址改成你自己的
 PANSOU_URL=http://你的地址:8888</code></pre>
             <p>也可以在后台「网盘搜索」页填写地址、Token、开关，点保存即可。</p>
+            <p>前台搜索页会按夸克、百度、阿里、UC 等网盘类型显示筛选按钮，复制链接和提取码都在结果卡片里。</p>
 
             <h3>访问不了 Telegram？</h3>
             <p>给 pansou 容器配置代理：</p>
@@ -428,10 +451,12 @@ HTTP_PROXY=http://host.docker.internal:7890</code></pre>
             <h2>八、API 一览</h2>
             <p>这些是本项目自己的接口，供前端或二次开发使用：</p>
 <pre><code>GET  /api/config                     # 前台配置
-GET  /api/search?wd=关键词            # 聚合搜索（影视）
+GET  /api/search?wd=关键词            # 聚合搜索，返回 list 和 groups（按片名/年份合并）
 GET  /api/sites                      # 站点列表（含启用状态）
 GET  /api/cloud/search?wd=关键词      # 网盘搜索
 GET  /api/detail?site_key=站点key&amp;id=影片ID
+GET  /api/play/proxy?url=播放地址&amp;site=站点key
+GET  /api/status                     # 公开状态页数据，不含站点地址
 GET  /api/hot                        # 最近 24 小时更新
 GET  /api/check?key=站点key           # 站点测速
 GET  /api/app/download               # 下载已生成的 Android APK
@@ -448,6 +473,13 @@ PUT    /api/admin/sites/:key
 DELETE /api/admin/sites/:key
 POST   /api/admin/sites/test
 POST   /api/admin/sites/import
+POST   /api/admin/health/check
+GET    /api/admin/health
+GET    /api/admin/backup
+GET    /api/admin/backups
+POST   /api/admin/backups
+POST   /api/admin/backups/:name/restore
+POST   /api/admin/restore
 PUT    /api/admin/settings
 POST   /api/admin/pansou/test
 GET    /api/admin/client
@@ -499,7 +531,16 @@ DELETE /api/admin/client/icon</code></pre>
             </details>
             <details>
                 <summary>怎么备份？</summary>
-                <p>备份 <code>data/db.json</code> 即可，里面包含采集站和网盘配置。</p>
+                <p>后台「备份与恢复」可以直接下载、创建和恢复备份。服务每天自动备份一次，保留最近 7 份，
+                文件在 <code>data/backups/</code>。恢复前会再自动备份当前数据。</p>
+            </details>
+            <details>
+                <summary>某条线路播放失败怎么办？</summary>
+                <p>播放器会自动换下一条线路，最多 3 次。全部失败通常是源站改了播放地址或加了验证，换一个搜索结果即可。</p>
+            </details>
+            <details>
+                <summary>后台显示站点冷却中，是坏了吗？</summary>
+                <p>不是永久禁用。连续失败 3 次后会冷却 5 分钟，结束后自动重新参与搜索。可以在后台点「自动巡检」立即重试。</p>
             </details>
         </section>
 

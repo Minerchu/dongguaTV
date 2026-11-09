@@ -1,0 +1,9 @@
+{$DOMAIN} {
+    encode zstd gzip
+    reverse_proxy dongguatv:3000
+
+    header {
+        -Server
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+}

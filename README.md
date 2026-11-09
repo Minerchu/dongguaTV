@@ -11,6 +11,13 @@
 
 影视聚合站点。后端 Node.js + Express，前端 Vue 3 + Bootstrap，附带 Kotlin + Jetpack Compose 的 Android 客户端。
 
+- 搜索结果按片名和年份聚合，同一个影片只出现一张卡片，点进去再选站点。
+- 播放统一走服务端代理，自动补 Referer/UA、重写 HLS 分片；当前线路失败会自动切换下一条，最多 3 次。
+- 采集站每 10 分钟自动巡检，连续失败先冷却，恢复后自动重新参与搜索。
+- 浏览记录、收藏和继续观看保存在浏览器本地，不需要账号。
+- 后台支持备份/恢复，每天自动备份，保留最近 7 份。
+- 自带可选 Caddy HTTPS 配置；另有公开状态页 `/status`，不暴露采集站地址。
+
 - 教程：https://minerchu.github.io/dongguaTV/
 - 后台：`http://服务器IP:3000/admin.html`
 
@@ -103,6 +110,7 @@ https://example.com/inc/apijson.php
 | --- | --- | --- |
 | `PORT` | `3000` | 容器内端口 |
 | `HOST_PORT` | `3000` | Docker 对外端口 |
+| `DOMAIN` | 空 | 启用自带 Caddy HTTPS 时填写域名 |
 | `DB_PATH` | `./db.json` | 配置文件；镜像内默认 `/app/data/db.json` |
 | `ADMIN_PASSWORD` | `admin` | 后台密码 |
 | `TMDB_API_KEY` | 空 | TMDb API Key |
@@ -116,10 +124,12 @@ https://example.com/inc/apijson.php
 | `SEARCH_TIMEOUT` | `6000` | 单站搜索超时，毫秒 |
 | `TEST_TIMEOUT` | `5000` | 添加站点时的测试超时，毫秒 |
 | `PANSOU_TIMEOUT` | `15000` | 网盘搜索超时，毫秒 |
+| `HEALTH_CHECK` | `1` | 采集站自动巡检开关，`0` 关闭 |
+| `BACKUP_DIR` | `data/backups` | 自动备份目录 |
 
 后台填写的 PanSou 配置优先于环境变量。
 
-## 端口和反向代理
+## 端口
 
 只改对外端口时，编辑 `.env`：
 
@@ -133,17 +143,37 @@ HOST_PORT=8080
 docker compose up -d
 ```
 
-容器内部仍使用 3000。需要域名和 HTTPS 时，用 Nginx / Caddy 把域名转发到 `HOST_PORT`。
+容器内部仍使用 3000。
+
+## 自带 HTTPS
+
+项目里已经放好 Caddy 配置，不需要自己写 Nginx 反代。先把域名解析到服务器，然后在 `.env` 填写：
+
+```env
+DOMAIN=tv.example.com
+```
+
+启动：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.https.yml up -d --build
+```
+
+Caddy 会自动申请和续期证书，并把请求转发到 `dongguatv:3000`。服务器的 80、443 端口要保持可用；如果 80 端口已经被别的服务占用，先停掉那个服务。
+
+只用 IP + 端口访问时，继续用默认的 `docker compose up -d` 即可，不需要设置 `DOMAIN`。
 
 TMDb 已经走本站 `/tmdb` 代理，不需要额外搭建反代。前端不会拿到 API Key。服务器无法访问 TMDb 时，可以设置 `HTTPS_PROXY`，或修改 `TMDB_API_BASE` 和 `TMDB_IMAGE_BASE`。
 
 ## 数据
 
-备份：
+后台「备份与恢复」可以直接下载、创建和恢复备份。也可以命令行复制：
 
 ```bash
 docker cp dongguatv:/app/data/db.json ./db.json.bak
 ```
+
+自动备份保存在宿主机 `data/backups/`，每天一次，保留最近 7 份。恢复前会先把当前数据库再备份一份。
 
 更新：
 
@@ -165,6 +195,8 @@ GET  /api/check?key=站点key
 GET  /api/hot
 GET  /api/search?wd=关键词
 GET  /api/detail?site_key=&id=
+GET  /api/play/proxy?url=&site=
+GET  /api/status
 GET  /api/cloud/search?wd=关键词
 GET  /api/app/download
 GET  /api/app/icon
@@ -186,6 +218,14 @@ POST   /api/admin/sites/test
 POST   /api/admin/sites/import
 POST   /api/admin/import/preview
 POST   /api/admin/import/sites
+POST   /api/admin/health/check
+GET    /api/admin/health
+GET    /api/admin/backup
+GET    /api/admin/backups
+POST   /api/admin/backups
+GET    /api/admin/backups/:name
+POST   /api/admin/backups/:name/restore
+POST   /api/admin/restore
 PUT    /api/admin/settings
 POST   /api/admin/pansou/test
 GET    /api/admin/client
@@ -202,6 +242,14 @@ DELETE /api/admin/client/icon
 **搜索没有结果**
 
 先在后台测试采集站。接口需要返回 JSON，网页、XML 和 404 都不能用。
+
+**某条线路播放失败**
+
+页面会自动尝试同一影片的下一条线路。如果全部失败，通常是源站改了播放地址或加了验证，换一个搜索结果即可。
+
+**后台显示某个站冷却中**
+
+这是连续失败后的临时保护，不是永久禁用。冷却结束后会自动重新参与搜索，也可以在后台点「自动巡检」立即重试。
 
 **TMDb 首页是空的**
 
