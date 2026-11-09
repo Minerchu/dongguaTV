@@ -44,7 +44,7 @@ test('WeChat pages redirect to the browser guide without blocking assets or APIs
 
         response = await request('/wechat-guide.html?next=%2Ftitle%2Fmovie%2F1263337', WECHAT_UA);
         assert.equal(response.status, 200);
-        assert.match(await response.text(), /请改用浏览器打开/);
+        assert.match(await response.text(), /建议使用浏览器访问/);
 
         response = await request('/api/config', WECHAT_UA);
         assert.equal(response.status, 200);
