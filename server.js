@@ -48,6 +48,29 @@ app.disable('x-powered-by');
 app.set('trust proxy', true);
 app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json({ limit: '5mb' }));
+
+const WECHAT_GUIDE_PATH = '/wechat-guide.html';
+
+function isWechatRequest(req) {
+    return /MicroMessenger/i.test(String(req.get('user-agent') || ''));
+}
+
+function safeWechatNext(originalUrl) {
+    const value = String(originalUrl || '/');
+    return value.charAt(0) === '/' && value.charAt(1) !== '/' ? value : '/';
+}
+
+app.use((req, res, next) => {
+    if (!isWechatRequest(req)) return next();
+    if (req.path === WECHAT_GUIDE_PATH) return next();
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.path === '/api' || req.path.startsWith('/api/') || req.path.startsWith('/tmdb/')) return next();
+    if (path.extname(req.path) && !/\.html?$/i.test(req.path)) return next();
+
+    res.set('Cache-Control', 'no-store');
+    return res.redirect(302, WECHAT_GUIDE_PATH + '?next=' + encodeURIComponent(safeWechatNext(req.originalUrl)));
+});
+
 app.use(express.static(PUBLIC_DIR));
 
 // ========== 数据 ==========

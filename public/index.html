@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- 核心：不发送 Referrer -->
     <meta name="referrer" content="no-referrer">
+    <script src="/wechat-guard.js"></script>
     
     <!-- 网站描述和关键词 -->
     <title>冬瓜TV - 私人影视聚合平台 | 打造你的专属Netflix</title>
@@ -781,8 +782,18 @@
         // 添加触摸滑动支持函数
         function initHotRowSwipe() {
             const hotRows = document.querySelectorAll('.hot-row');
+            const useNativeTouchScroll = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
             
             hotRows.forEach(row => {
+                if (row.dataset.swipeBound === '1') return;
+                row.dataset.swipeBound = '1';
+
+                if (useNativeTouchScroll) {
+                    row.style.cursor = 'default';
+                    row.style.scrollSnapType = 'x proximity';
+                    return;
+                }
+
                 let isDown = false;
                 let startX;
                 let scrollLeft;
@@ -2071,6 +2082,8 @@
                     sections.forEach(section => {
                         const hotRow = document.querySelector(`[data-section="${section}"]`);
                         if (hotRow) {
+                            if (hotRow.dataset.navBound === '1') return;
+                            hotRow.dataset.navBound = '1';
                             // 监听滚动事件更新按钮状态
                             hotRow.addEventListener('scroll', () => {
                                 this.updateNavButtons(hotRow, section);

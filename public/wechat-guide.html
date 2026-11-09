@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#09090b">
+<title>请用浏览器打开 · 冬瓜TV</title>
+<link rel="icon" href="/assets/favicon.png" type="image/png">
+<style>
+    :root {
+        color-scheme: dark;
+        --bg: #09090b;
+        --panel: rgba(24, 24, 27, .92);
+        --line: rgba(255, 255, 255, .1);
+        --text: #f7f7f8;
+        --muted: #a1a1aa;
+        --accent: #e50914;
+        --green: #35c759;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body { min-height: 100%; }
+
+    body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: max(22px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom));
+        overflow-x: hidden;
+        color: var(--text);
+        background:
+            radial-gradient(circle at 12% 8%, rgba(229, 9, 20, .24), transparent 30%),
+            radial-gradient(circle at 92% 88%, rgba(53, 199, 89, .1), transparent 28%),
+            linear-gradient(145deg, #050506 0%, #101013 52%, #08080a 100%);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: .22;
+        background-image: linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px);
+        background-size: 42px 42px;
+        mask-image: linear-gradient(to bottom, #000, transparent 82%);
+    }
+
+    .shell { width: min(700px, 100%); position: relative; z-index: 1; }
+
+    .brand {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 11px;
+        margin-bottom: 18px;
+        color: #fff;
+        font-size: 17px;
+        font-weight: 800;
+        letter-spacing: .04em;
+    }
+
+    .brand img {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+    }
+
+    .card {
+        padding: clamp(24px, 6vw, 42px);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: var(--panel);
+        box-shadow: 0 30px 90px rgba(0, 0, 0, .56), inset 0 1px 0 rgba(255, 255, 255, .04);
+        backdrop-filter: blur(24px);
+    }
+
+    .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+        padding: 7px 11px;
+        border: 1px solid rgba(53, 199, 89, .22);
+        border-radius: 999px;
+        color: #b9f6c9;
+        background: rgba(53, 199, 89, .09);
+        font-size: 12px;
+        font-weight: 650;
+    }
+
+    .status::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 0 4px rgba(53, 199, 89, .12);
+    }
+
+    .alert {
+        width: 68px;
+        height: 68px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 22px;
+        border: 1px solid rgba(229, 9, 20, .28);
+        border-radius: 20px;
+        color: #ff4b55;
+        background: linear-gradient(145deg, rgba(229, 9, 20, .2), rgba(229, 9, 20, .05));
+        box-shadow: 0 18px 40px rgba(229, 9, 20, .13);
+    }
+
+    .alert svg { width: 34px; height: 34px; }
+
+    h1 {
+        margin: 0 0 12px;
+        font-size: clamp(28px, 8vw, 42px);
+        line-height: 1.08;
+        letter-spacing: -.04em;
+    }
+
+    .lead {
+        margin: 0 0 24px;
+        color: var(--muted);
+        font-size: 14.5px;
+        line-height: 1.78;
+    }
+
+    .warning {
+        margin: 0 0 24px;
+        padding: 13px 15px;
+        border-left: 3px solid var(--accent);
+        border-radius: 4px 12px 12px 4px;
+        color: #e7e7e9;
+        background: rgba(229, 9, 20, .075);
+        font-size: 13px;
+        line-height: 1.65;
+    }
+
+    .steps {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 24px;
+    }
+
+    .step {
+        display: grid;
+        grid-template-columns: 30px 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 12px 13px;
+        border: 1px solid rgba(255, 255, 255, .07);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, .035);
+    }
+
+    .step-no {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+        color: #fff;
+        background: #2a2a2e;
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .step b { display: block; margin: 1px 0 3px; font-size: 13.5px; }
+    .step span { color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+    .address-label {
+        display: block;
+        margin-bottom: 8px;
+        color: #c7c7cc;
+        font-size: 12px;
+        font-weight: 650;
+    }
+
+    .address-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+    }
+
+    .address {
+        width: 100%;
+        min-width: 0;
+        padding: 12px 13px;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+        color: #d7d7dc;
+        background: rgba(0, 0, 0, .25);
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        outline: none;
+    }
+
+    .copy {
+        padding: 0 16px;
+        border: 0;
+        border-radius: 11px;
+        color: #fff;
+        background: #303036;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .copy:active { transform: scale(.98); }
+
+    .copy-note {
+        min-height: 18px;
+        margin: 8px 0 0;
+        color: #8e8e96;
+        font-size: 11.5px;
+    }
+
+    .copy-note.ok { color: #70e58d; }
+
+    .continue {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 18px;
+        padding: 13px 16px;
+        border-radius: 12px;
+        color: #fff;
+        background: var(--accent);
+        font-size: 14px;
+        font-weight: 750;
+        text-decoration: none;
+    }
+
+    .continue[hidden] { display: none; }
+
+    .footnote {
+        margin: 18px 0 0;
+        color: #71717a;
+        font-size: 11.5px;
+        line-height: 1.65;
+        text-align: center;
+    }
+
+    @media (max-width: 430px) {
+        body { padding-left: 12px; padding-right: 12px; }
+        .card { border-radius: 22px; }
+        .address-row { grid-template-columns: 1fr; }
+        .copy { padding: 11px 16px; }
+    }
+</style>
+</head>
+<body>
+<main class="shell">
+    <div class="brand">
+        <img src="/assets/donggua-icon.png" alt="">
+        <span>冬瓜TV</span>
+    </div>
+
+    <section class="card">
+        <div class="status" id="status">当前为微信内置浏览器</div>
+        <div class="alert" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 2.8 19a1.4 1.4 0 0 0 1.2 2h16a1.4 1.4 0 0 0 1.2-2L12 3Z"></path>
+                <path d="M12 9v4"></path>
+                <path d="M12 17h.01"></path>
+            </svg>
+        </div>
+        <h1 id="title">请改用浏览器打开</h1>
+        <p class="lead" id="lead">微信内置浏览器会拦截视频播放、跨域请求，并可能导致页面手势失效。请不要在微信里直接访问本站。</p>
+        <p class="warning">复制下方网址，打开 Safari、Chrome、Edge 或手机自带浏览器后再访问。不要从微信聊天窗口直接点开。</p>
+
+        <div class="steps" id="steps">
+            <div class="step">
+                <span class="step-no">1</span>
+                <div><b>点右上角的 ···</b><span>打开微信当前网页的菜单。</span></div>
+            </div>
+            <div class="step">
+                <span class="step-no">2</span>
+                <div><b>选择“在浏览器打开”</b><span>iPhone 上通常显示为“在 Safari 中打开”。</span></div>
+            </div>
+            <div class="step">
+                <span class="step-no">3</span>
+                <div><b>没有这个选项时，复制网址</b><span>打开手机浏览器，粘贴到地址栏后访问。</span></div>
+            </div>
+        </div>
+
+        <label class="address-label" for="address">当前访问地址</label>
+        <div class="address-row">
+            <input class="address" id="address" readonly aria-label="当前访问地址">
+            <button class="copy" id="copy" type="button">复制网址</button>
+        </div>
+        <p class="copy-note" id="copy-note">复制失败时，长按地址框手动复制。</p>
+        <a class="continue" id="continue" href="/" hidden>已在浏览器中，继续访问冬瓜TV</a>
+        <p class="footnote">这是浏览器环境提示，不是网站故障。请勿在微信内打开任何需要播放视频的网页。</p>
+    </section>
+</main>
+<script>
+(function () {
+    var origin = location.origin;
+    var rawNext = new URLSearchParams(location.search).get('next') || '/';
+    var next = '/';
+    try {
+        var parsed = new URL(rawNext, origin);
+        if (parsed.origin === origin && parsed.pathname.charAt(0) === '/' && parsed.pathname.charAt(1) !== '/') {
+            next = parsed.pathname + parsed.search + parsed.hash;
+        }
+    } catch (error) { }
+
+    var absoluteUrl = origin + next;
+    var input = document.getElementById('address');
+    var note = document.getElementById('copy-note');
+    var copyButton = document.getElementById('copy');
+    var continueLink = document.getElementById('continue');
+    var isWechat = /MicroMessenger/i.test(navigator.userAgent || '');
+
+    input.value = absoluteUrl;
+    continueLink.href = next;
+
+    if (!isWechat) {
+        document.getElementById('status').textContent = '当前已是浏览器环境';
+        document.getElementById('title').textContent = '可以直接访问';
+        document.getElementById('lead').textContent = '当前没有检测到微信内置浏览器。点击下方按钮继续访问冬瓜TV。';
+        document.getElementById('steps').hidden = true;
+        continueLink.hidden = false;
+    }
+
+    function fallbackCopy() {
+        input.focus();
+        input.select();
+        input.setSelectionRange(0, input.value.length);
+        try { return document.execCommand('copy'); } catch (error) { return false; }
+    }
+
+    copyButton.addEventListener('click', async function () {
+        var copied = false;
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(absoluteUrl);
+                copied = true;
+            }
+        } catch (error) { }
+        if (!copied) copied = fallbackCopy();
+        note.textContent = copied ? '网址已复制，请打开手机浏览器粘贴访问。' : '复制失败，请长按地址框手动复制。';
+        note.classList.toggle('ok', copied);
+    });
+})();
+</script>
+</body>
+</html>

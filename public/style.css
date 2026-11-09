@@ -567,6 +567,28 @@ body {
     position: relative;
 }
 
+.hot-row {
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+}
+
+.hot-row img {
+    -webkit-user-drag: none;
+}
+
+@media (max-width: 768px) {
+    .hot-row {
+        padding: 0 15px 18px;
+        margin: 0 -15px;
+        scroll-snap-type: x proximity;
+    }
+
+    .hot-card {
+        min-width: 120px;
+        width: 120px;
+    }
+}
+
 .hot-card:hover {
     transform: scale(1.08);
     z-index: 10;
