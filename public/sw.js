@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_NAME = 'donggua-shell-v1';
+const CACHE_NAME = 'donggua-shell-v2';
 const CORE_ASSETS = [
     '/',
     '/style.css',
@@ -34,6 +34,7 @@ function canHandle(request) {
     if (request.headers.has('range')) return false;
     if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/tmdb/')) return false;
     if (url.pathname.startsWith('/player') || url.pathname.startsWith('/admin')) return false;
+    if (url.pathname.startsWith('/live')) return false;
     if (url.pathname.startsWith('/wechat-guide')) return false;
     return true;
 }

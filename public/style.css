@@ -2340,9 +2340,40 @@ body.tmdb-open {
 }
 
 /* PWA 安装入口 */
-.pwa-install-btn {
+.nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin-left: auto;
-    margin-right: 10px;
+}
+
+.nav-live-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    color: #ddd;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    font-size: 12px;
+    text-decoration: none;
+    transition: 0.2s;
+}
+
+.nav-live-link:hover {
+    color: #fff;
+    background: rgba(229, 9, 20, 0.82);
+    border-color: rgba(229, 9, 20, 0.9);
+}
+
+@media (max-width: 560px) {
+    .nav-actions { gap: 7px; }
+    .nav-live-link { padding: 6px 9px; }
+    .nav-admin-link { display: none; }
+}
+
+.pwa-install-btn {
     padding: 6px 11px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.18);

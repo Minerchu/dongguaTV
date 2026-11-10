@@ -53,8 +53,11 @@
                 <img src="/assets/donggua-icon.png" alt="">
                 <span>冬瓜TV <small>MAX</small></span>
             </a>
-            <button id="pwa-install" class="pwa-install-btn" type="button" hidden><i class="fas fa-download"></i> 安装</button>
-            <a href="/admin.html" target="_blank" style="color:#888; text-decoration:none; font-size:12px;">Admin</a>
+            <div class="nav-actions">
+                <a v-if="liveEnabled" href="/live" class="nav-live-link" aria-label="电视直播"><i class="fas fa-tv"></i> 直播</a>
+                <button id="pwa-install" class="pwa-install-btn" type="button" hidden><i class="fas fa-download"></i> 安装</button>
+                <a href="/admin.html" target="_blank" class="nav-admin-link" style="color:#888; text-decoration:none; font-size:12px;">Admin</a>
+            </div>
         </nav>
 
         <!-- 1. Hero Carousel -->
@@ -976,7 +979,7 @@
                     episodeList: [], currentUrl: '', loadingDetail: false,
                     imageMap: {}, fallbackMap: {}, heroList: [], heroIndex: 0, scrollY: 0,
                     hotList: [],
-                    activeTab: 'video', cloudEnabled: false, cloudLoading: false,
+                    activeTab: 'video', cloudEnabled: false, liveEnabled: false, cloudLoading: false,
                     cloudResults: [], cloudMessage: '', cloudError: '', cloudTypes: {}, cloudFilter: 'all',
                     tmdbOpen: false, tmdbLoading: false, tmdbError: '', tmdbInfo: null, tmdbType: 'movie', tmdbLogo: '',
                     tmdbCast: [], tmdbCrew: [], tmdbTrailer: null, tmdbRecommendations: [],
@@ -1741,8 +1744,9 @@
                         const res = await fetch('/api/config');
                         const data = await res.json();
                         this.cloudEnabled = Boolean(data.cloudEnabled);
+                        this.liveEnabled = Boolean(data.liveEnabled);
                         this.androidApp = data.android || null;
-                    } catch (e) { this.cloudEnabled = false; }
+                    } catch (e) { this.cloudEnabled = false; this.liveEnabled = false; }
                 },
                 async doSearch(updateRoute = true) {
                     if (!this.keyword) return;

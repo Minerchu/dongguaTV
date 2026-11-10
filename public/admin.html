@@ -76,6 +76,7 @@
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='sites'}" @click="tab='sites'"><i class="fas fa-database me-1"></i>采集站管理</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='import'}" @click="tab='import'"><i class="fas fa-file-import me-1"></i>导入采集源</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='cloud'}" @click="tab='cloud'"><i class="fas fa-cloud me-1"></i>网盘搜索</button></li>
+            <li class="nav-item"><button class="nav-link" :class="{active:tab==='live'}" @click="tab='live'"><i class="fas fa-tv me-1"></i>电视直播</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='settings'}" @click="tab='settings'"><i class="fas fa-film me-1"></i>系统设置</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='client'}" @click="openClientTab"><i class="fab fa-android me-1"></i>Android 客户端</button></li>
             <li class="nav-item"><button class="nav-link" :class="{active:tab==='backup'}" @click="openBackupTab"><i class="fas fa-box-archive me-1"></i>备份与恢复</button></li>
@@ -383,6 +384,86 @@
                     部署完成后，在上面填 <code>http://服务器IP:8888</code>，点「测试连接」→「保存配置」。
                     如果 PanSou 开启了认证，再用 <code>AUTH_USERS</code> 的账号登录拿到 Token 填入。
                 </p>
+            </div>
+        </div>
+
+        <!-- 电视直播 -->
+        <div v-show="tab==='live'">
+            <div class="card p-4 mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+                    <div>
+                        <h6 class="mb-1"><i class="fas fa-tv text-danger me-1"></i>电视直播源</h6>
+                        <p class="text-muted small mb-0">添加 M3U / M3U8 订阅地址后，前台会出现「直播」入口。支持频道分组、台标搜索和失败自动转服务器代理。</p>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="liveEnabled" v-model="settings.liveEnabled">
+                        <label class="form-check-label small" for="liveEnabled">启用电视直播</label>
+                    </div>
+                </div>
+
+                <div class="alert alert-light border py-2 small">
+                    这里填的是<strong>直播订阅地址</strong>，通常是 <code>.m3u</code> 或 <code>.m3u8</code> 结尾的整份频道列表，不是单个频道的播放地址。
+                    订阅里包含私人 Token 时会保存在服务器的 <code>data/db.json</code>，不会写进前端源码。
+                </div>
+
+                <div v-if="settings.liveSources.length===0" class="border rounded-3 p-4 text-center text-muted small mb-3">
+                    <i class="fas fa-satellite-dish fa-2x mb-2 d-block opacity-50"></i>
+                    还没有直播源。点下方「添加直播订阅」，粘贴 M3U 地址并测试。
+                </div>
+
+                <div v-for="(source,index) in settings.liveSources" :key="source.id || ('new-' + index)" class="border rounded-3 p-3 mb-2">
+                    <div class="row g-2 align-items-center">
+                        <div class="col-lg-3">
+                            <input class="form-control form-control-sm" v-model.trim="source.name" placeholder="源名称，如：我的直播源">
+                        </div>
+                        <div class="col-lg-6">
+                            <input class="form-control form-control-sm mono" v-model.trim="source.url" placeholder="https://example.com/live.m3u">
+                        </div>
+                        <div class="col-lg-3 d-flex flex-wrap align-items-center gap-2">
+                            <div class="form-check form-switch mb-0 me-auto">
+                                <input class="form-check-input" type="checkbox" :id="'live-source-' + index" v-model="source.enabled">
+                                <label class="form-check-label small" :for="'live-source-' + index">启用</label>
+                            </div>
+                            <button class="btn btn-outline-secondary btn-sm" :disabled="!source.url || liveTest[source.url] && liveTest[source.url].loading" @click="testLiveSource(source)">
+                                <i class="fas fa-vial me-1"></i>{{ liveTest[source.url] && liveTest[source.url].loading ? '测试中' : '测试' }}
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" @click="removeLiveSource(index)" title="删除这个直播源">
+                                <i class="fas fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="liveTest[source.url]" class="small mt-2" :class="liveTest[source.url].success ? 'ok' : 'bad'">
+                        <template v-if="liveTest[source.url].loading">正在读取订阅并解析频道...</template>
+                        <template v-else-if="liveTest[source.url].success">
+                            <i class="fas fa-circle-check me-1"></i>解析成功：{{ liveTest[source.url].channelCount }} 个频道、{{ liveTest[source.url].groupCount }} 个分组，延迟 {{ liveTest[source.url].latency }}ms
+                            <span v-if="liveTest[source.url].sample && liveTest[source.url].sample.length" class="text-muted">（示例：{{ liveTest[source.url].sample.join('、') }}）</span>
+                        </template>
+                        <template v-else><i class="fas fa-circle-xmark me-1"></i>{{ liveTest[source.url].error || '测试失败' }}</template>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-2 mt-3">
+                    <button class="btn btn-outline-danger btn-sm" @click="addLiveSource"><i class="fas fa-plus me-1"></i>添加直播订阅</button>
+                    <button class="btn btn-danger btn-sm" :disabled="liveSaving" @click="saveLiveSettings">
+                        <i class="fas fa-floppy-disk me-1"></i>{{ liveSaving ? '保存中...' : '保存直播配置' }}
+                    </button>
+                    <a class="btn btn-outline-secondary btn-sm" href="/live" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square me-1"></i>打开直播页</a>
+                </div>
+            </div>
+
+            <div class="card p-4">
+                <h6 class="mb-2"><i class="fas fa-circle-info text-danger me-1"></i>M3U 订阅格式</h6>
+                <pre class="code mb-3">#EXTM3U
+#EXTINF:-1 tvg-id="cctv1" tvg-logo="https://example.com/cctv1.png" group-title="央视",CCTV-1
+https://example.com/live/cctv1.m3u8
+#EXTINF:-1 group-title="卫视",湖南卫视
+https://example.com/live/hunan.m3u8</pre>
+                <ul class="small text-muted mb-0">
+                    <li>支持 <code>group-title</code>、<code>tvg-logo</code>、<code>tvg-id</code> 和 <code>#EXTGRP</code> 分组写法。</li>
+                    <li>只保留浏览器可播放的 <code>http://</code>、<code>https://</code> 地址；<code>rtp://</code>、<code>udp://</code> 会被忽略。</li>
+                    <li>播放优先直连。HTTP 频道在 HTTPS 页面、跨域或直连失败时，才会自动切换本站代理重试。</li>
+                    <li>订阅内容会缓存 10 分钟；修改或保存直播源后缓存会自动清空。</li>
+                </ul>
             </div>
         </div>
 
@@ -802,6 +883,7 @@ createApp({
             tab: 'sites', sites: [],
             settings: {
                 pansouUrl: '', pansouToken: '', pansouEnabled: true,
+                liveEnabled: true, liveSources: [],
                 tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: '',
                 tmdbProxyUrl: '', tmdbImageProxyUrl: '', tmdbProxyConfigured: false, tmdbProxySource: 'default',
                 tmdbApiEndpoint: '', tmdbImageEndpoint: ''
@@ -822,6 +904,7 @@ createApp({
             importMode: 'tvbox', tvboxText: '', maccmsText: '', importParsing: false, importImporting: false,
             importCandidates: [], importErrors: [], importStats: null, importMessage: null,
             pansouResult: null,
+            liveTest: {}, liveSaving: false,
             backups: [], backupBusy: false, backupMessage: null
         };
     },
@@ -877,6 +960,7 @@ createApp({
                 this.sites = data.sites.map(s => Object.assign({}, s, { _originalKey: s.key }));
                 this.settings = Object.assign({
                     pansouUrl: '', pansouToken: '', pansouEnabled: true,
+                    liveEnabled: true, liveSources: [],
                     tmdbCredential: '', tmdbConfigured: false, tmdbType: 'none', tmdbSource: 'none', tmdbCredentialHint: '',
                     tmdbProxyUrl: '', tmdbImageProxyUrl: '', tmdbProxyConfigured: false, tmdbProxySource: 'default',
                     tmdbApiEndpoint: '', tmdbImageEndpoint: ''
@@ -1446,6 +1530,47 @@ createApp({
                 const { data } = await this.api('/api/admin/pansou/test', { method: 'POST', body: JSON.stringify({ url: this.settings.pansouUrl }) });
                 this.pansouResult = data;
             } catch (e) { this.pansouResult = { success: false, error: e.message }; }
+        },
+        addLiveSource() {
+            this.settings.liveSources.push({ name: '', url: '', enabled: true });
+        },
+        removeLiveSource(index) {
+            this.settings.liveSources.splice(index, 1);
+        },
+        async testLiveSource(source) {
+            if (!source || !source.url) return;
+            const key = source.url;
+            this.liveTest[key] = { loading: true, success: false };
+            try {
+                const { data } = await this.api('/api/admin/live/test', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: source.name, url: source.url })
+                });
+                this.liveTest[key] = Object.assign({ loading: false }, data);
+            } catch (e) {
+                this.liveTest[key] = { loading: false, success: false, error: e.message || '测试失败' };
+            }
+        },
+        async saveLiveSettings() {
+            this.liveSaving = true;
+            try {
+                const { data } = await this.api('/api/admin/settings', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                        liveEnabled: this.settings.liveEnabled,
+                        liveSources: this.settings.liveSources
+                    })
+                });
+                if (data.success) {
+                    this.settings = Object.assign({}, this.settings, data.settings || {});
+                    alert('直播配置已保存');
+                } else {
+                    alert(data.error || '保存失败');
+                }
+            } catch (e) {
+                alert(e.message || '保存失败');
+            }
+            this.liveSaving = false;
         }
     }
 }).mount('#app');

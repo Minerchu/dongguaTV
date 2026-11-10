@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="referrer" content="no-referrer">
+    <script src="/wechat-guard.js"></script>
+    <title>冬瓜TV · 电视直播</title>
+    <meta name="description" content="冬瓜TV 电视直播，支持 M3U 订阅、频道分组、搜索、收藏和 HLS 播放。">
+    <link rel="icon" href="/assets/favicon.png" type="image/png">
+    <link rel="apple-touch-icon" href="/assets/donggua-icon.png">
+    <meta name="theme-color" content="#0b0b0b">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css"
+        integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="/live.css">
+    <script src="/vendor/hls/hls.min.js"></script>
+</head>
+
+<body>
+    <header class="live-nav">
+        <a class="live-brand" href="/" aria-label="返回冬瓜TV首页">
+            <img src="/assets/donggua-icon.png" alt="">
+            <span>冬瓜TV <small>LIVE</small></span>
+        </a>
+        <div class="live-nav-actions">
+            <span id="navStatus" class="nav-status"><i class="fas fa-circle"></i> 正在读取频道</span>
+            <button id="refreshBtn" type="button" class="ghost-btn" title="刷新频道列表">
+                <i class="fas fa-rotate"></i><span>刷新</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="live-layout">
+        <section class="watch-panel">
+            <div id="videoShell" class="video-shell">
+                <video id="liveVideo" controls playsinline preload="metadata"></video>
+                <div id="emptyState" class="empty-state">
+                    <i class="fas fa-satellite-dish"></i>
+                    <strong>选择左侧频道开始观看</strong>
+                    <span>支持 HLS 直播，直连失败时会自动切换本站代理</span>
+                </div>
+                <div id="playerToast" class="player-toast" hidden></div>
+            </div>
+
+            <div class="channel-head">
+                <div class="channel-identity">
+                    <div id="currentLogo" class="current-logo"><i class="fas fa-tv"></i></div>
+                    <div class="current-copy">
+                        <h1 id="currentName">电视直播</h1>
+                        <div id="currentMeta" class="current-meta">请选择一个频道</div>
+                    </div>
+                </div>
+                <div class="watch-actions">
+                    <button id="favoriteBtn" type="button" class="icon-btn" title="收藏频道" disabled>
+                        <i class="far fa-star"></i>
+                    </button>
+                    <button id="retryBtn" type="button" class="icon-btn" title="重新连接" disabled>
+                        <i class="fas fa-rotate-right"></i>
+                    </button>
+                    <button id="pipBtn" type="button" class="icon-btn" title="画中画" disabled>
+                        <i class="fas fa-clone"></i>
+                    </button>
+                    <button id="fullscreenBtn" type="button" class="icon-btn" title="全屏" disabled>
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="play-status">
+                <span id="statusDot" class="status-dot"></span>
+                <span id="statusText">等待选择频道</span>
+                <span id="playMode" class="play-mode" hidden></span>
+            </div>
+
+            <div class="watch-tips">
+                <span><i class="fas fa-bolt"></i> 优先直连</span>
+                <span><i class="fas fa-shield-halved"></i> 失败才走代理</span>
+                <span><i class="fas fa-keyboard"></i> ↑↓ 切台 · F 全屏</span>
+            </div>
+        </section>
+
+        <aside class="channel-sidebar">
+            <div class="sidebar-title">
+                <div>
+                    <h2>频道列表</h2>
+                    <p id="channelCount">正在加载...</p>
+                </div>
+                <span id="liveBadge" class="live-badge"><i class="fas fa-signal"></i> LIVE</span>
+            </div>
+
+            <div class="sidebar-tools">
+                <label class="search-box">
+                    <i class="fas fa-magnifying-glass"></i>
+                    <input id="searchInput" type="search" autocomplete="off" placeholder="搜索频道、分组或来源">
+                </label>
+                <select id="groupSelect" aria-label="按分组筛选">
+                    <option value="all">全部分组</option>
+                </select>
+            </div>
+
+            <div class="filter-row">
+                <button type="button" class="filter-btn active" data-view="all">全部频道</button>
+                <button type="button" class="filter-btn" data-view="favorites"><i class="fas fa-star"></i> 我的收藏</button>
+                <span id="filterCount"></span>
+            </div>
+
+            <div id="channelList" class="channel-list" aria-live="polite"></div>
+            <button id="loadMoreBtn" type="button" class="load-more" hidden>加载更多频道</button>
+            <div id="sourceSummary" class="source-summary"></div>
+        </aside>
+    </main>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/live.js" defer></script>
+</body>
+
+</html>

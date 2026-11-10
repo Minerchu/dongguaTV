@@ -13,6 +13,20 @@
     "entertainment",
     "video"
   ],
+  "shortcuts": [
+    {
+      "name": "电视直播",
+      "short_name": "直播",
+      "url": "/live",
+      "icons": [
+        {
+          "src": "/assets/donggua-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
   "icons": [
     {
       "src": "/assets/donggua-192.png",

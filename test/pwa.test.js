@@ -20,6 +20,7 @@ test('PWA manifest and service worker avoid private API routes', () => {
     assert.equal(manifest.start_url, '/');
     assert.ok(manifest.icons.some(icon => icon.sizes === '192x192'));
     assert.ok(manifest.icons.some(icon => icon.sizes === '512x512'));
+    assert.ok(manifest.shortcuts.some(shortcut => shortcut.url === '/live'));
     manifest.icons.forEach(icon => {
         assert.equal(fs.existsSync(path.join(PUBLIC_DIR, icon.src)), true, icon.src);
     });
@@ -29,6 +30,7 @@ test('PWA manifest and service worker avoid private API routes', () => {
     assert.match(sw, /startsWith\('\/tmdb\/'\)/);
     assert.match(sw, /startsWith\('\/player'\)/);
     assert.match(sw, /startsWith\('\/admin'\)/);
+    assert.match(sw, /startsWith\('\/live'\)/);
     assert.match(sw, /WeChat|wechat-guide/);
 });
 

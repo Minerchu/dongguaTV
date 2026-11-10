@@ -16,6 +16,7 @@ const backup = require('./backup');
 const { createAdapterRegistry } = require('./adapters');
 const tmdb = require('./tmdb');
 const probe = require('./probe');
+const live = require('./live');
 const QRCode = require('qrcode');
 
 const app = express();
@@ -104,6 +105,8 @@ function defaultSettings() {
         pansouUrl: '',
         pansouToken: '',
         pansouEnabled: true,
+        liveEnabled: true,
+        liveSources: [],
         tmdbCredential: '',
         tmdbProxyUrl: '',
         tmdbImageProxyUrl: '',
@@ -116,6 +119,8 @@ function normalizeSettings(input) {
     merged.tmdbCredential = tmdb.normalizeCredential(merged.tmdbCredential).slice(0, 500);
     merged.tmdbProxyUrl = tmdb.sanitizeProxyUrl(merged.tmdbProxyUrl);
     merged.tmdbImageProxyUrl = tmdb.sanitizeProxyUrl(merged.tmdbImageProxyUrl);
+    merged.liveEnabled = merged.liveEnabled !== false;
+    merged.liveSources = live.normalizeSources(merged.liveSources);
     merged.client = Object.assign(defaultClientSettings(), source.client || {});
     const versionCode = Number(merged.client.versionCode);
     merged.client.versionCode = Number.isFinite(versionCode) && versionCode > 0 ? Math.floor(versionCode) : 1;
@@ -527,6 +532,12 @@ function recordFailure(ip) {
     else rec.count++;
 }
 
+const liveService = live.createService({
+    getSettings: () => getDB().settings,
+    secret: ADMIN_SECRET
+});
+app.use('/api/live', liveService.router);
+
 // ========== 采集站检查 ==========
 async function testApi(input) {
     const site = input && typeof input === 'object' ? input : { api: input };
@@ -744,9 +755,12 @@ app.get('/tmdb/t/p/*', async (req, res) => {
 app.get('/api/config', (req, res) => {
     const db = getDB();
     const active = activeSites();
+    const liveSources = live.normalizeSources(db.settings.liveSources);
     res.json({
         cloudEnabled: Boolean(pansouBase()) && db.settings.pansouEnabled !== false,
         tmdbConfigured: Boolean(tmdbState(db.settings).value),
+        liveEnabled: db.settings.liveEnabled !== false,
+        liveSourceCount: liveSources.filter(source => source.enabled !== false).length,
         siteCount: active.length,
         cooling: active.filter(site => healthMonitor.isCooling(site.key)).length,
         android: publicAndroidState()
@@ -912,6 +926,10 @@ app.get('/api/status', (req, res) => {
             configured: Boolean(pansouBase()),
             enabled: Boolean(pansouBase()) && db.settings.pansouEnabled !== false
         },
+        live: {
+            enabled: db.settings.liveEnabled !== false,
+            sources: live.normalizeSources(db.settings.liveSources).filter(source => source.enabled !== false).length
+        },
         android: {
             available: publicAndroidState().available,
             version: publicAndroidState().version,
@@ -969,6 +987,18 @@ app.post('/api/admin/logout', (req, res) => {
 
 app.get('/api/admin/me', (req, res) => {
     res.json({ loggedIn: verifySession(adminToken(req)) });
+});
+
+app.post('/api/admin/live/test', requireAdmin, async (req, res) => {
+    try {
+        const result = await liveService.testSource({
+            name: req.body && req.body.name,
+            url: req.body && req.body.url
+        });
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ success: false, error: error.message || '直播源测试失败' });
+    }
 });
 
 app.get('/api/admin/sites', requireAdmin, (req, res) => {
@@ -1304,6 +1334,14 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
     }
     if (body.pansouToken !== undefined) db.settings.pansouToken = cleanText(body.pansouToken, 500);
     if (body.pansouEnabled !== undefined) db.settings.pansouEnabled = Boolean(body.pansouEnabled);
+    if (body.liveEnabled !== undefined) db.settings.liveEnabled = Boolean(body.liveEnabled);
+    if (body.liveSources !== undefined) {
+        try {
+            db.settings.liveSources = live.normalizeSources(body.liveSources, { strict: true });
+        } catch (error) {
+            return res.status(400).json({ success: false, error: error.message });
+        }
+    }
     if (body.tmdbCredential !== undefined) {
         db.settings.tmdbCredential = tmdb.normalizeCredential(body.tmdbCredential).slice(0, 500);
     }
@@ -1317,6 +1355,7 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
     }
     saveDB(db);
     pansouTokenCache = { token: '', exp: 0 };
+    liveService.clearCache();
     invalidateCatalogCache();
     res.json({ success: true, settings: adminSettingsView(db.settings) });
 });
@@ -1492,6 +1531,10 @@ app.get(['/search', '/title/:type/:id', '/person/:id', '/watch', '/calendar'], (
 
 app.get('/status', (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, 'status.html'));
+});
+
+app.get('/live', (req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'live.html'));
 });
 
 app.get(['/player', '/player/'], (req, res) => {
