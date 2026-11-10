@@ -518,11 +518,11 @@ https://example.com/live/hunan.m3u8</pre>
                     </div>
                     <div class="row g-3">
                         <div class="col-lg-7">
-                            <label class="form-label small text-muted">TMDb 反代根地址（可选）</label>
-                            <input class="form-control mono" v-model.trim="settings.tmdbProxyUrl" placeholder="https://tmdb.example.workers.dev" @keyup.enter="saveTmdb">
+                            <label class="form-label small text-muted">TMDb 反代根地址（不是本站 3000 端口）</label>
+                            <input class="form-control mono" v-model.trim="settings.tmdbProxyUrl" placeholder="https://tmdb.example.com" @keyup.enter="saveTmdb">
                             <div class="form-text">
-                                填根地址即可，系统会自动请求 <code>/3</code> 和 <code>/t/p</code>。留空表示服务器直连。
-                                <a href="https://minerchu.github.io/dongguaTV/#tmdb-proxy" target="_blank" rel="noopener">Cloudflare 反代教程</a>
+                                填 TMDb 代理的根地址，系统会自动请求 <code>/3</code> 和 <code>/t/p</code>；不要填主站 <code>http://127.0.0.1:3000</code>。留空表示服务器直连。
+                                <a href="https://minerchu.github.io/dongguaTV/#tmdb-proxy" target="_blank" rel="noopener">TMDb 反代教程</a>
                             </div>
                         </div>
                         <div class="col-lg-5">
