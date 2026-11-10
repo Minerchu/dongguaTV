@@ -15,6 +15,12 @@
     <meta name="author" content="Minerchu">
     <link rel="icon" href="/assets/favicon.png" type="image/png">
     <link rel="apple-touch-icon" href="/assets/donggua-icon.png">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#0b0b0b">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="冬瓜TV">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css"
         integrity="sha512-GQGU0fMMi238uA+a/bdWJfpUGKUkBdgfFdgBm72SUQ6BeyWjoY/ton0tEjH+OSH9iP4Dfh+7HM0I9f5eR0L/4w=="
@@ -34,6 +40,7 @@
         integrity="sha512-pax4MlgXjHEPfCwcJLQhigY7+N8rt6bVvWLFyUMuxShv170X53TRzGPmPkZmGBhk+jikR8WBM4yl7A9WMHHqvg=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link rel="stylesheet" href="/style.css">
+    <script src="/pwa.js" defer></script>
 
 </head>
 
@@ -46,6 +53,7 @@
                 <img src="/assets/donggua-icon.png" alt="">
                 <span>冬瓜TV <small>MAX</small></span>
             </a>
+            <button id="pwa-install" class="pwa-install-btn" type="button" hidden><i class="fas fa-download"></i> 安装</button>
             <a href="/admin.html" target="_blank" style="color:#888; text-decoration:none; font-size:12px;">Admin</a>
         </nav>
 
@@ -448,6 +456,12 @@
                         </div>
                     </div>
                     <div class="video-header-actions">
+                        <button class="btn-cast" :class="{ 'btn-cast-active': autoNextEnabled }" @click="toggleAutoNext">
+                            <i class="fas fa-forward-step"></i> {{ autoNextEnabled ? '自动连播' : '不连播' }}
+                        </button>
+                        <button class="btn-cast" :class="{ 'btn-cast-active': skipEditorOpen || skipMarkEnd > skipMarkStart }" @click="toggleSkipEditor">
+                            <i class="fas fa-scissors"></i> 片头跳过
+                        </button>
                         <button class="btn-cast" :class="{ 'btn-cast-active': favoriteActive }" @click="toggleFavorite">
                             <i class="fas" :class="favoriteActive ? 'fa-heart' : 'fa-heart-circle-plus'"></i>
                             {{ favoriteActive ? '已收藏' : '收藏' }}
@@ -458,10 +472,36 @@
                     </div>
                 </div>
 
+                <div v-if="skipEditorOpen" class="skip-editor">
+                    <div>
+                        <div class="skip-editor-title">片头跳过</div>
+                        <div class="skip-editor-hint">按影片保存在当前浏览器，不会上传服务器</div>
+                    </div>
+                    <label class="skip-editor-field">开始
+                        <input type="number" min="0" step="1" v-model.number="skipMarkStart"> 秒
+                    </label>
+                    <button type="button" @click="setSkipPoint('start')">用当前时间</button>
+                    <label class="skip-editor-field">结束
+                        <input type="number" min="0" step="1" v-model.number="skipMarkEnd"> 秒
+                    </label>
+                    <button type="button" @click="setSkipPoint('end')">用当前时间</button>
+                    <label class="skip-editor-field"><input type="checkbox" v-model="skipMarkEnabled"> 自动跳过</label>
+                    <button type="button" class="primary" @click="saveSkipMarks">保存</button>
+                    <button type="button" @click="clearSkipMarks">清除</button>
+                </div>
+
                 <!-- 2. 中部：超大播放器 -->
                 <div class="player-box">
                     <iframe ref="playerFrame" class="stream-player" title="冬瓜TV 播放器"
                         allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>
+                    <button v-if="skipIntroVisible" type="button" class="skip-intro-btn" @click="skipIntroNow">
+                        跳过片头 {{ formatClock(Math.max(0, skipMarkEnd - currentProgress)) }}
+                    </button>
+                    <div v-if="nextCountdown > 0" class="next-episode-card">
+                        <span>{{ nextCountdown }} 秒后播放下一集</span>
+                        <button type="button" @click="playNextNow">立即播放</button>
+                        <button type="button" class="secondary" @click="cancelAutoNext">取消</button>
+                    </div>
                     <div v-if="playerNotice" class="player-notice">{{ playerNotice }}</div>
                 </div>
 
@@ -954,7 +994,11 @@
                     currentProgress: 0, currentDuration: 0, playerNotice: '',
                     pendingResume: null, pendingSeek: 0,
                     suppressPlayerErrorUntil: 0, lastHistorySave: 0, noticeTimer: null,
-                    playerMessageHandler: null
+                    playerMessageHandler: null,
+                    autoNextEnabled: true, nextCountdown: 0, autoNextTimer: null,
+                    skipEditorOpen: false, skipMarkStart: 0, skipMarkEnd: 0,
+                    skipMarkEnabled: true, skipMarks: {}, skipIntroVisible: false,
+                    skipAppliedForPlay: false
                 }
             },
             mounted() {
@@ -965,11 +1009,13 @@
                 document.addEventListener('slid.bs.carousel', this.handleHeroSlide);
                 window.addEventListener('keydown', (e) => {
                     if (e.key !== 'Escape') return;
-                    if (this.personOpen) this.closePerson();
+                    if (this.skipEditorOpen) this.skipEditorOpen = false;
+                    else if (this.personOpen) this.closePerson();
                     else if (this.calendarOpen) this.closeCalendar();
                     else if (this.tmdbOpen) this.closeTmdb();
                     else if (this.showDetail) this.closeDetail();
                 });
+                this.loadPlayerPrefs();
                 this.fetchHero();
                 this.fetchAllLists();
                 this.fetchConfig();
@@ -985,6 +1031,8 @@
             beforeUnmount() {
                 document.removeEventListener('slid.bs.carousel', this.handleHeroSlide);
                 if (this.playerMessageHandler) window.removeEventListener('message', this.playerMessageHandler);
+                if (this.noticeTimer) clearTimeout(this.noticeTimer);
+                this.cancelAutoNext();
             },
             computed: {
                 groupedList() {
@@ -1913,8 +1961,11 @@
                 },
                 closeDetail(updateRoute = true) {
                     this.recordHistory(this.currentProgress, this.currentDuration);
+                    this.cancelAutoNext();
                     this.showDetail = false;
                     this.playerNotice = '';
+                    this.skipEditorOpen = false;
+                    this.skipIntroVisible = false;
                     this.postPlayerCommand('pause');
                     if (updateRoute !== false) setAppRoute(this.searchRoute());
                 },
@@ -1931,9 +1982,10 @@
                         const res = await fetch(`/api/detail?site_key=${encodeURIComponent(source.site_key)}&id=${encodeURIComponent(source.vod_id)}`);
                         const data = await res.json();
                         if (data.list && data.list.length > 0 && data.list[0].vod_play_url) {
+                            if (data.list[0].playback) source.playback = data.list[0].playback;
                             if (data.list[0].vod_name && this.currentGroup) this.currentGroup.name = data.list[0].vod_name;
                             if (data.list[0].vod_pic && this.currentGroup) this.currentGroup.pic = data.list[0].vod_pic;
-                            this.parseEpisodes(data.list[0].vod_play_url, resume);
+                            this.parseEpisodes(data.list[0].vod_play_url, resume, data.list[0].vod_play_from);
                         } else {
                             this.notifyPlayer('这个站点没有返回可播放的剧集');
                         }
@@ -1942,12 +1994,19 @@
                     }
                     this.loadingDetail = false;
                 },
-                parseEpisodes(urlStr, resume) {
+                parseEpisodes(urlStr, resume, fromStr) {
                     let playSource = String(urlStr || '');
                     if (!playSource) { this.episodeList = []; return; }
+                    let playFrom = '';
                     if (playSource.includes('$$$')) {
                         const sets = playSource.split('$$$');
-                        playSource = sets.find(s => s.toLowerCase().includes('m3u8')) || sets[0];
+                        const froms = String(fromStr || '').split('$$$');
+                        let setIndex = sets.findIndex(s => s.toLowerCase().includes('m3u8'));
+                        if (setIndex < 0) setIndex = 0;
+                        playSource = sets[setIndex] || '';
+                        playFrom = froms[setIndex] || '';
+                    } else {
+                        playFrom = String(fromStr || '').split('$$$')[0] || '';
                     }
                     const episodes = playSource.split('#').map((ep, index) => {
                         const p = ep.split('$');
@@ -1955,7 +2014,8 @@
                         if (value.startsWith('//')) value = 'https:' + value;
                         return {
                             name: p.length > 1 ? (p[0] || ('第 ' + (index + 1) + ' 集')) : '正片',
-                            url: value
+                            url: value,
+                            from: playFrom
                         };
                     }).filter(ep => ep.url && /^https?:\/\//i.test(ep.url));
                     this.episodeList = episodes;
@@ -1976,12 +2036,143 @@
                         pic: (this.currentGroup && this.currentGroup.pic) || ''
                     });
                     if (Number(startAt) > 2) params.set('t', String(Math.floor(Number(startAt))));
+                    if (this.currentSource && this.currentSource.playback) params.set('playback', this.currentSource.playback);
+                    if (this.currentEpisode && this.currentEpisode.from) params.set('from', this.currentEpisode.from);
                     return '/player/?' + params.toString();
                 },
                 postPlayerCommand(command, time) {
                     const frame = this.$refs.playerFrame;
                     if (!frame || !frame.contentWindow) return;
                     frame.contentWindow.postMessage({ type: 'command', command, time }, window.location.origin);
+                },
+                loadPlayerPrefs() {
+                    try {
+                        const autoNext = localStorage.getItem('dg_auto_next_v1');
+                        if (autoNext !== null) this.autoNextEnabled = autoNext !== '0';
+                        const marks = JSON.parse(localStorage.getItem('dg_skip_marks_v1') || '{}');
+                        this.skipMarks = marks && typeof marks === 'object' && !Array.isArray(marks) ? marks : {};
+                    } catch (e) {
+                        this.skipMarks = {};
+                    }
+                },
+                savePlayerPrefs() {
+                    try {
+                        localStorage.setItem('dg_auto_next_v1', this.autoNextEnabled ? '1' : '0');
+                        localStorage.setItem('dg_skip_marks_v1', JSON.stringify(this.skipMarks));
+                    } catch (e) { }
+                },
+                skipKey() {
+                    return this.favoriteKey(this.currentGroup);
+                },
+                currentSkipMark() {
+                    const key = this.skipKey();
+                    return key ? this.skipMarks[key] : null;
+                },
+                loadSkipMark() {
+                    const mark = this.currentSkipMark();
+                    this.skipMarkStart = mark ? Math.max(0, Number(mark.start) || 0) : 0;
+                    this.skipMarkEnd = mark ? Math.max(0, Number(mark.end) || 0) : 0;
+                    this.skipMarkEnabled = mark ? mark.enabled !== false : true;
+                    this.skipAppliedForPlay = false;
+                    this.skipIntroVisible = false;
+                },
+                toggleAutoNext() {
+                    this.autoNextEnabled = !this.autoNextEnabled;
+                    if (!this.autoNextEnabled) this.cancelAutoNext();
+                    this.savePlayerPrefs();
+                    this.notifyPlayer(this.autoNextEnabled ? '已开启自动连播' : '已关闭自动连播');
+                },
+                toggleSkipEditor() {
+                    if (this.skipEditorOpen) {
+                        this.skipEditorOpen = false;
+                        return;
+                    }
+                    const mark = this.currentSkipMark();
+                    if (mark) {
+                        this.skipMarkStart = Math.max(0, Number(mark.start) || 0);
+                        this.skipMarkEnd = Math.max(0, Number(mark.end) || 0);
+                        this.skipMarkEnabled = mark.enabled !== false;
+                    } else {
+                        this.skipMarkStart = Math.max(0, Math.floor(Number(this.currentProgress) || 0));
+                        this.skipMarkEnd = this.skipMarkStart + 90;
+                        this.skipMarkEnabled = true;
+                    }
+                    this.skipEditorOpen = true;
+                },
+                setSkipPoint(which) {
+                    const position = Math.max(0, Math.floor(Number(this.currentProgress) || 0));
+                    if (which === 'start') this.skipMarkStart = position;
+                    else this.skipMarkEnd = position;
+                },
+                saveSkipMarks() {
+                    const start = Math.max(0, Math.floor(Number(this.skipMarkStart) || 0));
+                    const end = Math.max(0, Math.floor(Number(this.skipMarkEnd) || 0));
+                    if (end - start < 3) {
+                        this.notifyPlayer('结束时间至少要比开始时间多 3 秒');
+                        return;
+                    }
+                    const key = this.skipKey();
+                    if (!key) return;
+                    this.skipMarks[key] = { start, end, enabled: !!this.skipMarkEnabled };
+                    this.savePlayerPrefs();
+                    this.skipMarkStart = start;
+                    this.skipMarkEnd = end;
+                    this.skipAppliedForPlay = false;
+                    this.skipIntroVisible = start <= this.currentProgress && this.currentProgress < end;
+                    this.skipEditorOpen = false;
+                    this.notifyPlayer(this.skipMarkEnabled ? '片头已保存，播放时会自动跳过' : '片头已保存，可手动跳过');
+                },
+                clearSkipMarks() {
+                    const key = this.skipKey();
+                    if (key) delete this.skipMarks[key];
+                    this.savePlayerPrefs();
+                    this.skipMarkStart = 0;
+                    this.skipMarkEnd = 0;
+                    this.skipMarkEnabled = true;
+                    this.skipAppliedForPlay = false;
+                    this.skipIntroVisible = false;
+                    this.skipEditorOpen = false;
+                    this.notifyPlayer('已清除本影片的片头标记');
+                },
+                skipIntroNow() {
+                    if (this.skipMarkEnd <= this.skipMarkStart) return;
+                    this.skipAppliedForPlay = true;
+                    this.skipIntroVisible = false;
+                    this.postPlayerCommand('seek', this.skipMarkEnd);
+                },
+                hasNextEpisode() {
+                    return this.currentEpisodeIndex >= 0 && this.currentEpisodeIndex + 1 < this.episodeList.length;
+                },
+                playNextNow() {
+                    this.cancelAutoNext();
+                    if (!this.hasNextEpisode()) return;
+                    const index = this.currentEpisodeIndex + 1;
+                    const episode = this.episodeList[index];
+                    if (episode) this.play(episode.url, episode, index);
+                },
+                cancelAutoNext() {
+                    if (this.autoNextTimer) {
+                        clearInterval(this.autoNextTimer);
+                        this.autoNextTimer = null;
+                    }
+                    this.nextCountdown = 0;
+                },
+                startAutoNextCountdown() {
+                    if (!this.autoNextEnabled || !this.hasNextEpisode()) return;
+                    this.cancelAutoNext();
+                    this.nextCountdown = 8;
+                    this.autoNextTimer = setInterval(() => {
+                        this.nextCountdown = Math.max(0, this.nextCountdown - 1);
+                        if (this.nextCountdown <= 0) this.playNextNow();
+                    }, 1000);
+                },
+                formatClock(seconds) {
+                    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+                    const hours = Math.floor(total / 3600);
+                    const minutes = Math.floor((total % 3600) / 60);
+                    const secs = total % 60;
+                    const pad = value => String(value).padStart(2, '0');
+                    return hours > 0 ? hours + ':' + pad(minutes) + ':' + pad(secs) : pad(minutes) + ':' + pad(secs);
                 },
                 onPlayerMessage(event) {
                     const frame = this.$refs.playerFrame;
@@ -1998,10 +2189,13 @@
                 },
                 play(url, episode, index, options = {}) {
                     if (!url) return;
+                    this.cancelAutoNext();
+                    this.skipEditorOpen = false;
                     this.currentUrl = url;
                     this.currentEpisode = episode || { name: '正片', url };
                     this.currentEpisodeIndex = Number.isInteger(index) ? index : 0;
                     const startAt = Math.max(0, Number(options.progress) || 0);
+                    this.loadSkipMark();
                     this.pendingSeek = startAt;
                     this.currentProgress = startAt;
                     this.currentDuration = 0;
@@ -2018,6 +2212,15 @@
                     duration = Math.max(0, Number(duration) || 0);
                     this.currentProgress = position;
                     this.currentDuration = duration;
+                    const hasMark = this.skipMarkEnd > this.skipMarkStart + 0.5;
+                    const inIntro = hasMark && position >= this.skipMarkStart && position < this.skipMarkEnd;
+                    if (inIntro && this.skipMarkEnabled && !this.skipAppliedForPlay) {
+                        this.skipAppliedForPlay = true;
+                        this.skipIntroVisible = false;
+                        this.postPlayerCommand('seek', this.skipMarkEnd);
+                    } else {
+                        this.skipIntroVisible = inIntro && !this.skipAppliedForPlay;
+                    }
                     if (position > 3 && Date.now() - this.lastHistorySave > 4000) {
                         this.lastHistorySave = Date.now();
                         this.recordHistory(position, duration);
@@ -2026,6 +2229,7 @@
                 onPlayerEnded(duration) {
                     duration = Math.max(0, Number(duration) || this.currentDuration || 0);
                     this.recordHistory(duration, duration);
+                    if (this.autoNextEnabled && this.hasNextEpisode()) this.startAutoNextCountdown();
                 },
                 notifyPlayer(message) {
                     this.playerNotice = String(message || '');

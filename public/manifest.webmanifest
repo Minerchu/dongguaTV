@@ -1,0 +1,30 @@
+{
+  "name": "冬瓜TV",
+  "short_name": "冬瓜TV",
+  "description": "私人影视聚合平台，支持搜索、TMDb 影视资料、网盘资源与安卓客户端。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#0b0b0b",
+  "categories": [
+    "entertainment",
+    "video"
+  ],
+  "icons": [
+    {
+      "src": "/assets/donggua-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/donggua-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

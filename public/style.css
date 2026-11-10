@@ -2338,3 +2338,174 @@ body.tmdb-open {
     .calendar-day b { font-size: 18px; }
     .calendar-grid { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 16px 12px; }
 }
+
+/* PWA 安装入口 */
+.pwa-install-btn {
+    margin-left: auto;
+    margin-right: 10px;
+    padding: 6px 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ddd;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.pwa-install-btn:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.pwa-install-btn[hidden] {
+    display: none !important;
+}
+
+/* 播放器增强 */
+.skip-intro-btn {
+    position: absolute;
+    top: 16px;
+    right: 18px;
+    z-index: 9;
+    padding: 10px 16px;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 999px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+    font-size: 13px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.skip-intro-btn:hover {
+    background: rgba(229, 9, 20, 0.9);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.next-episode-card {
+    position: absolute;
+    left: 50%;
+    bottom: 28px;
+    z-index: 10;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(92%, 520px);
+    padding: 12px 15px;
+    color: #fff;
+    background: rgba(10, 10, 10, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+    font-size: 13px;
+}
+
+.next-episode-card span {
+    flex: 1;
+    white-space: nowrap;
+}
+
+.next-episode-card button {
+    padding: 7px 11px;
+    color: #fff;
+    background: rgba(229, 9, 20, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.next-episode-card button.secondary {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.skip-editor {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    margin: 0 0 16px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+}
+
+.skip-editor-title {
+    color: #f2f2f2;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.skip-editor-hint {
+    color: #888;
+    font-size: 12px;
+}
+
+.skip-editor-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #bbb;
+    font-size: 12px;
+}
+
+.skip-editor input[type="number"] {
+    width: 72px;
+    padding: 6px 8px;
+    color: #fff;
+    background: #171717;
+    border: 1px solid #333;
+    border-radius: 7px;
+}
+
+.skip-editor input[type="checkbox"] {
+    accent-color: #e50914;
+}
+
+.skip-editor button {
+    padding: 7px 10px;
+    color: #ddd;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 7px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.skip-editor button.primary {
+    color: #fff;
+    background: rgba(229, 9, 20, 0.8);
+    border-color: rgba(229, 9, 20, 0.9);
+}
+
+@media (max-width: 640px) {
+    .skip-intro-btn {
+        top: 10px;
+        right: 10px;
+        padding: 8px 12px;
+        font-size: 12px;
+    }
+
+    .next-episode-card {
+        left: 12px;
+        right: 12px;
+        bottom: 16px;
+        max-width: none;
+        transform: none;
+        flex-wrap: wrap;
+        font-size: 12px;
+    }
+
+    .next-episode-card span {
+        white-space: normal;
+    }
+
+    .skip-editor {
+        padding: 12px;
+    }
+}
