@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>冬瓜TV 部署与使用教程</title>
-<meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索、Cloudflare / Nginx / 宝塔反向代理、TMDb 和 Android 客户端教程。">
+<meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索、M3U 电视直播、Cloudflare / Nginx / 宝塔反向代理、TMDb 网络线路和 Android 客户端教程。">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="assets/donggua-icon.png" type="image/png">
 <link rel="apple-touch-icon" href="assets/donggua-icon.png">
@@ -26,11 +26,12 @@
             <a href="#first-run">三、首次使用</a>
             <a href="#sites">四、添加采集站</a>
             <a href="#pansou">五、网盘搜索</a>
-            <a href="#android">六、Android 客户端</a>
-            <a href="#reverse-proxy">七、域名与反向代理</a>
-            <a href="#tmdb">八、TMDb 功能</a>
-            <a href="#api">九、API 一览</a>
-            <a href="#faq">十、常见问题</a>
+            <a href="#live">六、电视直播</a>
+            <a href="#android">七、Android 客户端</a>
+            <a href="#reverse-proxy">八、网站域名反代</a>
+            <a href="#tmdb">九、TMDb 功能</a>
+            <a href="#api">十、API 一览</a>
+            <a href="#faq">十一、常见问题</a>
             <a href="#notice">免责声明</a>
         </nav>
     </aside>
@@ -41,7 +42,7 @@
             <h1>冬瓜TV 部署与使用教程</h1>
             <p>从零开始部署，到后台添加采集站、开启网盘搜索，一步一步来。</p>
             <div class="hero-tags">
-                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>Cloudflare / Nginx / 宝塔</span><span>TMDb 服务端代理</span><span>Android 原生客户端</span><span>播放直连与手动切源</span><span>PING 巡检</span>
+                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>电视直播</span><span>Cloudflare / Nginx / 宝塔</span><span>TMDb 服务端代理</span><span>Android 原生客户端</span><span>播放直连与手动切源</span><span>PING 巡检</span>
             </div>
             <div class="note">
                 本页只是静态教程，不运行任何后端。仓库和正式版本里<strong>不包含任何采集站地址</strong>，
@@ -220,7 +221,7 @@ environment:
 
             <h3>5. 域名和 HTTPS</h3>
             <p>用域名访问、去掉网址里的端口，需要做反向代理。Cloudflare、Nginx 和宝塔三种方式都在
-            <a href="#reverse-proxy">第七节</a>，按你现有的环境选一种即可。</p>
+            <a href="#reverse-proxy">第八节</a>，按你现有的环境选一种即可。</p>
         </section>
 
         <section id="first-run">
@@ -390,8 +391,32 @@ PANSOU_URL=http://你的地址:8888</code></pre>
             <a href="https://github.com/fish2018/pansou" target="_blank" rel="noopener">PanSou 文档</a>。</p>
         </section>
 
+        <section id="live">
+            <h2>六、电视直播</h2>
+            <p>后台「电视直播」可以添加 M3U / M3U8 订阅，前台首页会出现「直播」入口。频道列表、分组、搜索、收藏和 HLS 播放都在 <code>/live</code>。</p>
+            <h3>添加直播源</h3>
+            <ol>
+                <li>登录后台，打开「电视直播」。</li>
+                <li>点「添加直播订阅」，填写一个名称和订阅地址。填整份频道列表，不是单个频道的播放地址。</li>
+                <li>点「测试」，能显示频道数和分组数后再点「保存直播设置」。</li>
+                <li>打开 <code>/live</code> 或首页的「直播」入口，选择频道播放。</li>
+            </ol>
+            <p>订阅文件一般长这样：</p>
+<pre><code>#EXTM3U
+#EXTINF:-1 tvg-logo="https://example.com/logo.png" group-title="央视",CCTV-1
+https://example.com/live/cctv1.m3u8
+#EXTINF:-1 group-title="卫视",湖南卫视
+https://example.com/live/hunan.m3u8</code></pre>
+            <div class="note">
+                当前支持浏览器可播放的 HTTP/HTTPS HLS、MP4 和 WebM。FLV、<code>rtp://</code>、<code>udp://</code> 会被忽略。
+                播放优先直连源站，失败后才走服务器签名代理。订阅里带私人 Token 时，只会保存在服务器的
+                <code>data/db.json</code>，不会写进前端源码。
+            </div>
+            <p>没有直播源时，后台可以添加多条订阅并单独启停。某一条订阅失效不会影响其他订阅。</p>
+        </section>
+
         <section id="android">
-            <h2>六、Android 原生客户端</h2>
+            <h2>七、Android 原生客户端</h2>
             <p>
                 客户端使用 Kotlin + Jetpack Compose 编写，直接调用本站的
                 <code>/api/search</code>、<code>/api/detail</code>、<code>/api/cloud/search</code> 和 TMDb 同源接口，
@@ -447,11 +472,18 @@ PANSOU_URL=http://你的地址:8888</code></pre>
         </section>
 
         <section id="reverse-proxy">
-            <h2>七、域名与反向代理</h2>
+            <h2>八、网站域名与反向代理</h2>
             <div class="note">
                 建议把服务部署在能稳定访问 TMDb 的<strong>海外服务器</strong>。中国大陆机器访问 TMDb 可能超时，
                 首页推荐、海报和演员资料会不完整。这和下面的域名反向代理是两件事：前者决定服务器能否访问 TMDb，
                 后者决定用户能否用域名和 HTTPS 打开你的网站。
+            </div>
+            <div class="warn">
+                <strong>先分清两个“反代”：</strong>
+                这一节代理的是冬瓜TV网站本身，目标是 <code>http://127.0.0.1:3000</code>；
+                TMDb 反代的目标只有 <code>api.themoviedb.org</code> 和 <code>image.tmdb.org</code>，
+                <strong>不要把 3000 端口填进后台的「TMDb 反代根地址」</strong>。TMDb 专用配置见
+                <a href="#tmdb-proxy">第九节</a>。
             </div>
 
             <h3>先确定源站地址</h3>
@@ -551,7 +583,7 @@ proxy_buffering off;</code></pre>
         </section>
 
         <section id="tmdb">
-            <h2>八、TMDb 功能</h2>
+            <h2>九、TMDb 功能</h2>
             <h3>首页和详情页已经用到的功能</h3>
             <ul>
                 <li><strong>首页推荐</strong>：本周趋势、华语剧集、日韩剧集、港台电影、正在热映、高分电影、今日播出。</li>
@@ -585,7 +617,13 @@ proxy_buffering off;</code></pre>
                 容器本身仍然连不上 <code>api.themoviedb.org</code>，需要在后台填写下面的反代地址。
             </div>
 
-            <h3 id="tmdb-proxy">服务器在国内：用 Cloudflare Worker 反代 TMDb</h3>
+            <h3 id="tmdb-proxy">服务器在国内：反向代理 TMDb</h3>
+            <div class="warn">
+                <strong>这里不是反代网站，也不是反代 3000 端口。</strong>
+                需要转发的是 TMDb 的两类地址：<code>https://api.themoviedb.org/3/...</code> 和
+                <code>https://image.tmdb.org/t/p/...</code>。反代完成后，后台填的是这个代理的根地址，
+                例如 <code>https://tmdb.example.com</code>，不是 <code>http://127.0.0.1:3000</code>。
+            </div>
             <p>后台「系统设置 → TMDb 影视资料 → TMDb 网络线路」已经可以直接填写反代地址，保存后立即生效，
             不需要改 <code>.env</code>，也不需要重建容器。</p>
             <ol>
@@ -673,10 +711,68 @@ export default {
 </code></pre>
             <p>完整文件也在仓库：<a href="https://github.com/Minerchu/dongguaTV/blob/main/examples/cloudflare-tmdb-worker.mjs" target="_blank" rel="noopener">examples/cloudflare-tmdb-worker.mjs</a>。</p>
 
-            <h4>绑定自己的域名</h4>
+            <h4>方式 A：绑定自己的 Cloudflare 域名</h4>
             <p>如果 <code>*.workers.dev</code> 在当前网络下访问不了，可以在 Worker 的
             <strong>Settings → Domains &amp; Routes → Custom Domain</strong> 绑定一个已经接入 Cloudflare 的域名，
             例如 <code>tmdb.example.com</code>。绑定成功后在后台填 <code>https://tmdb.example.com</code>。</p>
+
+            <h4>方式 B：Nginx 反代 TMDb</h4>
+            <p>准备一个只给 TMDb 用的域名，例如 <code>tmdb.example.com</code>，把 A 记录指向这台海外服务器。
+            先写 HTTP 配置，证书交给 Certbot 自动补全。新建 <code>/etc/nginx/sites-available/tmdb-proxy</code>：</p>
+<pre><code>server {
+    listen 80;
+    server_name tmdb.example.com;
+
+    location = / {
+        default_type application/json;
+        return 200 '{"ok":true,"service":"donggua-tmdb-proxy"}';
+    }
+
+    location ^~ /3/ {
+        proxy_pass https://api.themoviedb.org/3/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host api.themoviedb.org;
+        proxy_set_header Authorization $http_authorization;
+        proxy_set_header Accept-Language $http_accept_language;
+        proxy_set_header User-Agent DongguaTV-TMDB-Proxy/1.0;
+        proxy_set_header Range $http_range;
+        proxy_set_header If-None-Match $http_if_none_match;
+        add_header Access-Control-Allow-Origin "*" always;
+        add_header Cache-Control "public, max-age=300" always;
+    }
+
+    location ^~ /t/p/ {
+        proxy_pass https://image.tmdb.org/t/p/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host image.tmdb.org;
+        proxy_set_header User-Agent DongguaTV-TMDB-Proxy/1.0;
+        add_header Access-Control-Allow-Origin "*" always;
+        expires 7d;
+    }
+}</code></pre>
+            <p>启用配置并申请证书。Certbot 成功后会自动补上 <code>443</code> 和证书路径：</p>
+<pre><code>sudo ln -s /etc/nginx/sites-available/tmdb-proxy /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+sudo certbot --nginx -d tmdb.example.com</code></pre>
+            <p>浏览器打开 <code>https://tmdb.example.com/</code> 应看到 <code>{"ok":true}</code>。
+            回到冬瓜TV 后台，把 <code>https://tmdb.example.com</code> 填进「TMDb 反代根地址」。
+            不要把这里的域名换成主站域名，也不要填 <code>:3000</code>。</p>
+
+            <h4>方式 C：宝塔面板反代 TMDb</h4>
+            <ol>
+                <li>在宝塔「网站」里添加站点 <code>tmdb.example.com</code>，PHP 选纯静态，不建数据库。</li>
+                <li>进入站点设置 →「SSL」，申请 Let's Encrypt 证书并开启强制 HTTPS。</li>
+                <li>进入「反向代理」→「添加反向代理」。第一项：目标 URL 填 <code>https://api.themoviedb.org</code>，
+                发送域名填 <code>api.themoviedb.org</code>，代理目录填 <code>/3/</code>。</li>
+                <li>再添加一项：目标 URL 填 <code>https://image.tmdb.org</code>，发送域名填 <code>image.tmdb.org</code>，
+                代理目录填 <code>/t/p/</code>。</li>
+                <li>如果宝塔版本不支持同一站点配置多条路径代理，直接打开站点「配置文件」，把上面的 Nginx
+                <code>location</code> 段粘进去，再执行 <code>nginx -t</code> 并重载。</li>
+                <li>后台「TMDb 反代根地址」填 <code>https://tmdb.example.com</code>，点「测试连接」。</li>
+            </ol>
+            <p>宝塔、Nginx、Cloudflare 三种方式只选一种。TMDb 反代域名和主站域名可以分开，
+            但不要把主站的 <code>http://127.0.0.1:3000</code> 填进 TMDb 设置。</p>
 
             <h3>其他代理方式</h3>
             <p>在 <code>.env</code> 里填写代理：</p>
@@ -684,16 +780,17 @@ export default {
 HTTP_PROXY=http://host.docker.internal:7890</code></pre>
             <p><code>host.docker.internal</code> 指向宿主机，Compose 已经配置好映射。</p>
             <p>All-in-One 则直接把同样的变量写成 <code>-e HTTPS_PROXY=...</code>。</p>
-            <p>这层代理只解决服务器访问 TMDb 的问题；网站本身的域名和 HTTPS 仍按第七节配置。</p>
+            <p>这层代理只解决服务器访问 TMDb 的问题；网站本身的域名和 HTTPS 仍按第八节配置。</p>
         </section>
 
         <section id="api">
-            <h2>九、API 一览</h2>
+            <h2>十、API 一览</h2>
             <p>这些是本项目自己的接口，供前端或二次开发使用：</p>
 <pre><code>GET  /api/config                     # 前台配置
 GET  /api/search?wd=关键词            # 聚合搜索，返回 list 和 groups（按片名/年份合并）
 GET  /api/sites                      # 站点列表（含启用状态）
 GET  /api/cloud/search?wd=关键词      # 网盘搜索
+GET  /api/live/channels              # 直播频道、分组和签名播放地址
 GET  /api/detail?site_key=站点key&amp;id=影片ID
 GET  /api/status                     # 公开状态页数据，不含站点地址
 GET  /api/hot                        # 最近 24 小时更新
@@ -715,6 +812,7 @@ POST   /api/admin/sites/import
 GET    /api/admin/adapters
 POST   /api/admin/adapters/reload
 POST   /api/admin/health/check
+POST   /api/admin/live/test
 GET    /api/admin/health
 GET    /api/admin/backup
 GET    /api/admin/backups
@@ -733,7 +831,7 @@ DELETE /api/admin/client/icon</code></pre>
         </section>
 
         <section id="faq">
-            <h2>十、常见问题</h2>
+            <h2>十一、常见问题</h2>
             <details>
                 <summary>启动后搜索没有任何结果？</summary>
                 <p>先确认后台已经添加了采集站并且处于「启用」状态。新安装默认是空的。</p>

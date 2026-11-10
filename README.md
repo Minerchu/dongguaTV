@@ -19,6 +19,7 @@
 - 浏览记录、收藏和继续观看保存在浏览器本地，不需要账号。
 - 后台支持备份/恢复，每天自动备份，保留最近 7 份。
 - 支持服务端自定义源适配器，非 Maccms 的 JSON/HTML 站点也能接入后台，并参与搜索、详情和 PING 巡检。
+- 支持 M3U / M3U8 电视直播订阅，后台可添加、测试、启停多个源；前台支持频道搜索、分组、收藏和 HLS 播放。
 - Android 客户端支持扫码绑定服务器、检查更新，以及调用系统播放器或投屏应用。
 - 公开状态页 `/status`，不暴露采集站地址。
 
@@ -154,7 +155,7 @@ cp examples/adapters/generic-json.js data/adapters/
 
 后台「系统设置」里填写的 TMDb 凭据优先于环境变量，两种凭据只需填一个。完整配置见 [.env.example](.env.example)。改端口只需在 `.env` 写 `HOST_PORT=8080`，再执行 `docker compose up -d`；容器内部仍是 `3000`。
 
-服务器无法直连 TMDb（例如部署在国内）时，在后台「系统设置 → TMDb 网络线路」填写 Cloudflare Worker 反代根地址即可，保存后立即生效。教程和 Worker 代码见[这里](https://minerchu.github.io/dongguaTV/#tmdb-proxy)。
+服务器无法直连 TMDb（例如部署在国内）时，在后台「系统设置 → TMDb 网络线路」填写 TMDb 反代根地址即可，保存后立即生效。注意：网站域名反代的目标是 `http://127.0.0.1:3000`，TMDb 反代的目标只有 `api.themoviedb.org` 和 `image.tmdb.org`，两者不要混用。Cloudflare Worker、Nginx 和宝塔配置见[这里](https://minerchu.github.io/dongguaTV/#tmdb-proxy)。
 
 ## 数据与更新
 
