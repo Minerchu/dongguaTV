@@ -1,108 +1,150 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-motion data-type="developer-tool">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>冬瓜TV 部署与使用教程</title>
 <meta name="description" content="冬瓜TV 的 Docker 部署、修改端口、后台添加采集站、PanSou 网盘搜索、M3U 电视直播、Cloudflare / Nginx / 宝塔反向代理、TMDb 网络线路和 Android 客户端教程。">
+<meta name="page-type" content="developer-tool">
+<meta name="site-kind" content="developer-tool">
+<meta name="theme-color" content="#08090b">
+<meta name="color-scheme" content="dark">
+<meta property="og:type" content="website">
+<meta property="og:title" content="冬瓜TV · 部署与使用文档">
+<meta property="og:description" content="Docker 部署、后台添加采集站、网盘搜索、电视直播、反向代理与 Android 客户端。">
+<meta property="og:image" content="https://minerchu.github.io/dongguaTV/assets/readme-banner.png">
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="assets/donggua-icon.png" type="image/png">
 <link rel="apple-touch-icon" href="assets/donggua-icon.png">
 </head>
 <body>
 
-<header class="topbar">
-    <a class="logo" href="#top"><img src="assets/donggua-icon.png" alt=""> 冬瓜TV <small>部署与使用教程</small></a>
-    <a class="repo" href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener">GitHub 仓库 ↗</a>
-</header>
-
-<div class="layout">
-    <aside class="sidebar">
-        <nav>
-            <p class="nav-title">目录</p>
-            <a href="#preview">界面预览</a>
-            <a href="#deploy">一、部署</a>
-            <a href="#ports">二、修改端口</a>
-            <a href="#first-run">三、首次使用</a>
-            <a href="#sites">四、添加采集站</a>
-            <a href="#pansou">五、网盘搜索</a>
-            <a href="#live">六、电视直播</a>
-            <a href="#android">七、Android 客户端</a>
-            <a href="#reverse-proxy">八、网站域名反代</a>
-            <a href="#tmdb">九、TMDb 功能</a>
-            <a href="#api">十、API 一览</a>
-            <a href="#faq">十一、常见问题</a>
-            <a href="#notice">免责声明</a>
+<a class="skip-link" href="#doc-content">跳到正文</a>
+<header class="site-header">
+    <div class="header-inner">
+        <a class="brand" href="#top" aria-label="冬瓜TV 文档首页">
+            <img src="assets/donggua-icon.png" alt="">
+            <span class="brand-copy"><strong>冬瓜TV</strong><small>Docs</small></span>
+        </a>
+        <nav class="header-links" aria-label="主导航">
+            <a href="#deploy">部署</a>
+            <a href="#sites">采集站</a>
+            <a href="#live">直播</a>
+            <a href="#api">API</a>
         </nav>
+        <div class="header-actions">
+            <a class="github-link" href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener">GitHub <span>↗</span></a>
+            <a class="header-cta" href="#deploy">开始部署</a>
+            <button class="menu-toggle" type="button" aria-controls="toc" aria-expanded="false" data-toc-toggle>目录</button>
+        </div>
+    </div>
+</header>
+<div class="toc-backdrop" data-toc-close></div>
+
+<main id="top">
+
+    <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-inner">
+            <div class="hero-copy">
+                <p class="eyebrow"><span></span>Self-hosted streaming / 部署文档</p>
+                <h1 id="hero-title">把影视、直播<br><span>放进一台服务器。</span></h1>
+                <p class="hero-lead">冬瓜TV 是一个自托管影视聚合站。Docker 一条命令启动，后台添加采集站与直播源，TMDb 资料、PanSou 网盘搜索和 Android 客户端都在同一套服务里。</p>
+                <div class="hero-actions">
+                    <a class="btn btn-primary" href="#deploy">开始部署 <span>→</span></a>
+                    <a class="btn btn-ghost" href="#preview">查看界面</a>
+                </div>
+                <div class="hero-facts" aria-label="功能概览">
+                    <span>Docker Compose</span>
+                    <span>TMDb</span>
+                    <span>PanSou</span>
+                    <span>M3U Live</span>
+                </div>
+            </div>
+            <div class="hero-stage">
+                <div class="hero-halo" aria-hidden="true"></div>
+                <figure class="screen-main">
+                    <div class="browser-chrome" aria-hidden="true">
+                        <i></i><i></i><i></i>
+                        <span>冬瓜TV / 首页</span>
+                    </div>
+                    <img src="assets/screenshots/home-tmdb.jpg?v=20261109" alt="冬瓜TV 桌面首页，横版剧照、TMDb Logo 与推荐内容">
+                </figure>
+                <figure class="screen-phone">
+                    <img src="assets/screenshots/mobile-tmdb.jpg?v=20261109" alt="冬瓜TV 手机首页，无字竖版海报">
+                </figure>
+            </div>
+        </div>
+        <a class="scroll-cue" href="#preview"><span>向下阅读</span><i aria-hidden="true"></i></a>
+    </section>
+
+<div class="docs-shell">
+    <aside class="sidebar" id="toc">
+        <div class="sidebar-head">
+            <span>Documentation</span>
+            <button class="toc-close" type="button" aria-label="关闭目录" data-toc-close>×</button>
+        </div>
+        <nav aria-label="文档目录">
+            <a href="#preview"><span>00</span>界面预览</a>
+            <a href="#deploy"><span>01</span>部署</a>
+            <a href="#ports"><span>02</span>修改端口</a>
+            <a href="#first-run"><span>03</span>首次使用</a>
+            <a href="#sites"><span>04</span>添加采集站</a>
+            <a href="#pansou"><span>05</span>网盘搜索</a>
+            <a href="#live"><span>06</span>电视直播</a>
+            <a href="#android"><span>07</span>Android 客户端</a>
+            <a href="#reverse-proxy"><span>08</span>网站域名反代</a>
+            <a href="#tmdb"><span>09</span>TMDb 功能</a>
+            <a href="#api"><span>10</span>API 一览</a>
+            <a href="#faq"><span>11</span>常见问题</a>
+            <a href="#notice"><span>—</span>免责声明</a>
+        </nav>
+        <a class="sidebar-repo" href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener"><span>源码仓库</span><b>↗</b></a>
     </aside>
 
-    <main id="top">
+    <div class="doc-column" id="doc-content">
 
-        <section class="hero">
-            <h1>冬瓜TV 部署与使用教程</h1>
-            <p>从零开始部署，到后台添加采集站、开启网盘搜索，一步一步来。</p>
-            <div class="hero-tags">
-                <span>Docker Compose</span><span>单容器镜像</span><span>可视化后台</span><span>PanSou 网盘搜索</span><span>电视直播</span><span>Cloudflare / Nginx / 宝塔</span><span>TMDb 服务端代理</span><span>Android 原生客户端</span><span>播放直连与手动切源</span><span>PING 巡检</span>
-            </div>
-            <div class="note">
-                本页只是静态教程，不运行任何后端。仓库和正式版本里<strong>不包含任何采集站地址</strong>，
-                需要按下面的方法自行添加。
-            </div>
-        </section>
-
-        <section id="preview">
+        <section id="preview" data-label="00 / Preview">
             <h2>界面预览</h2>
-            <p>截图来自实际界面，后台示例使用虚构站点。首页会按屏幕宽度选择横版剧照或竖版海报，详情页使用大背景、海报缩略图和 TMDb 透明 Logo。</p>
+            <p>截图来自实际界面，后台示例使用虚构站点。首页会按屏幕宽度选择横版剧照或竖版海报，详情页使用大背景、海报缩略图和 TMDb 透明 Logo。点开任意图片可查看原图。</p>
             <div class="preview-grid">
                 <figure class="preview-card wide">
                     <a href="assets/screenshots/home-tmdb.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/home-tmdb.jpg?v=20261109" alt="冬瓜TV 首页 TMDb 推荐" loading="lazy"></a>
-                    <figcaption>桌面首页：横版剧照、TMDb 透明 Logo 和自动轮播</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/tmdb-detail.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/tmdb-detail.jpg?v=20261109" alt="TMDb 影视详情" loading="lazy"></a>
-                    <figcaption>影视详情：大背景、海报缩略图、Logo、演员与关键词</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/tmdb-providers.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/tmdb-providers.jpg?v=20261109" alt="TMDb 播放平台与相似推荐" loading="lazy"></a>
-                    <figcaption>在哪儿看：按地区显示播放平台，并给出相似推荐</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/mobile-tmdb.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/mobile-tmdb.jpg?v=20261109" alt="移动端首页 TMDb" loading="lazy"></a>
-                    <figcaption>手机首页：自动切换无字竖版海报，避免横向图被硬裁</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/mobile-search-results.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/mobile-search-results.jpg?v=20261109" alt="移动端搜索结果" loading="lazy"></a>
-                    <figcaption>手机端搜索：隐藏首页轮播，搜索框与结果紧贴页面顶部</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/mobile-tmdb-detail.jpg?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/mobile-tmdb-detail.jpg?v=20261109" alt="移动端 TMDb 详情" loading="lazy"></a>
-                    <figcaption>手机端详情：竖屏布局、海报缩略图与 Logo，先看资料再找片源</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/admin-sites.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-sites.jpg?v=20261109c" alt="后台采集站管理" loading="lazy"></a>
-                    <figcaption>后台采集站管理：Maccms 接口与自定义适配器</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/admin-import.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-import.jpg?v=20261109c" alt="后台导入 TVBox 配置和苹果CMS接口" loading="lazy"></a>
-                    <figcaption>导入采集源：TVBox 配置或苹果CMS接口，解析后自动标出已存在</figcaption>
                 </figure>
                 <figure class="preview-card">
                     <a href="assets/screenshots/admin-android.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-android.jpg?v=20261109c" alt="后台生成 Android 客户端" loading="lazy"></a>
-                    <figcaption>Android 客户端：名称、图标、版本号与扫码绑定二维码</figcaption>
                 </figure>
                 <figure class="preview-card wide">
                     <a href="assets/screenshots/admin-tmdb.png?v=20261109" target="_blank" rel="noopener"><img src="assets/screenshots/admin-tmdb.png?v=20261109" alt="后台 TMDb 凭据设置" loading="lazy"></a>
-                    <figcaption>系统设置：短 API Key 和长 Read Access Token 任选一个，自动识别并测试</figcaption>
                 </figure>
                 <figure class="preview-card wide">
                     <a href="assets/screenshots/admin-guide.jpg?v=20261109c" target="_blank" rel="noopener"><img src="assets/screenshots/admin-guide.jpg?v=20261109c" alt="后台使用教程" loading="lazy"></a>
-                    <figcaption>后台内置教程：接口格式、谷歌搜索关键词、验证和排错</figcaption>
                 </figure>
             </div>
         </section>
 
-        <section id="deploy">
-            <h2>一、部署</h2>
+        <section id="deploy" data-label="01 / Deploy">
+            <h2>部署</h2>
 
             <h3>方式 A：Docker Compose（推荐）</h3>
             <p>会同时启动「主站」和「PanSou 网盘搜索」两个容器，适合绝大多数人。</p>
@@ -164,8 +206,8 @@ npm start</code></pre>
             </table>
         </section>
 
-        <section id="ports">
-            <h2>二、修改端口</h2>
+        <section id="ports" data-label="02 / Ports">
+            <h2>修改端口</h2>
             <p>先记住一句话：<strong>左边是宿主机端口，右边是容器端口</strong>。</p>
 <pre><code>ports:
   - "8080:3000"
@@ -224,8 +266,8 @@ environment:
             <a href="#reverse-proxy">第八节</a>，按你现有的环境选一种即可。</p>
         </section>
 
-        <section id="first-run">
-            <h2>三、首次使用</h2>
+        <section id="first-run" data-label="03 / First run">
+            <h2>首次使用</h2>
             <ol>
                 <li>打开 <code>http://服务器IP:端口/admin.html</code></li>
                 <li>输入管理员密码。默认是 <code>admin</code></li>
@@ -253,8 +295,8 @@ environment:
             </div>
         </section>
 
-        <section id="sites">
-            <h2>四、添加采集站</h2>
+        <section id="sites" data-label="04 / Sources">
+            <h2>添加采集站</h2>
             <p>
                 项目里<strong>不内置任何采集站</strong>，也不在 GitHub 上保存任何站点地址。
                 你需要自己找公开的 <strong>Maccms V10 JSON 接口</strong>，然后在后台添加。
@@ -352,8 +394,8 @@ cp examples/adapters/generic-json.js data/adapters/
             </div>
         </section>
 
-        <section id="pansou">
-            <h2>五、网盘搜索（PanSou）</h2>
+        <section id="pansou" data-label="05 / Cloud search">
+            <h2>网盘搜索（PanSou）</h2>
             <p>
                 PanSou 是一个独立的 Go 服务，负责搜索 Telegram 频道和网盘插件。
                 本项目的 Compose 和 All-in-One 镜像<strong>已经把它打包进去</strong>，不需要你单独部署。
@@ -391,8 +433,8 @@ PANSOU_URL=http://你的地址:8888</code></pre>
             <a href="https://github.com/fish2018/pansou" target="_blank" rel="noopener">PanSou 文档</a>。</p>
         </section>
 
-        <section id="live">
-            <h2>六、电视直播</h2>
+        <section id="live" data-label="06 / Live TV">
+            <h2>电视直播</h2>
             <p>后台「电视直播」可以添加 M3U / M3U8 订阅，前台首页会出现「直播」入口。频道列表、分组、搜索、收藏和 HLS 播放都在 <code>/live</code>。</p>
             <h3>添加直播源</h3>
             <ol>
@@ -415,8 +457,8 @@ https://example.com/live/hunan.m3u8</code></pre>
             <p>没有直播源时，后台可以添加多条订阅并单独启停。某一条订阅失效不会影响其他订阅。</p>
         </section>
 
-        <section id="android">
-            <h2>七、Android 原生客户端</h2>
+        <section id="android" data-label="07 / Android">
+            <h2>Android 原生客户端</h2>
             <p>
                 客户端使用 Kotlin + Jetpack Compose 编写，直接调用本站的
                 <code>/api/search</code>、<code>/api/detail</code>、<code>/api/cloud/search</code> 和 TMDb 同源接口，
@@ -471,8 +513,8 @@ https://example.com/live/hunan.m3u8</code></pre>
             </p>
         </section>
 
-        <section id="reverse-proxy">
-            <h2>八、网站域名与反向代理</h2>
+        <section id="reverse-proxy" data-label="08 / Reverse proxy">
+            <h2>网站域名与反向代理</h2>
             <div class="note">
                 建议把服务部署在能稳定访问 TMDb 的<strong>海外服务器</strong>。中国大陆机器访问 TMDb 可能超时，
                 首页推荐、海报和演员资料会不完整。这和下面的域名反向代理是两件事：前者决定服务器能否访问 TMDb，
@@ -582,8 +624,8 @@ proxy_buffering off;</code></pre>
             </div>
         </section>
 
-        <section id="tmdb">
-            <h2>九、TMDb 功能</h2>
+        <section id="tmdb" data-label="09 / TMDb">
+            <h2>TMDb 功能</h2>
             <h3>首页和详情页已经用到的功能</h3>
             <ul>
                 <li><strong>首页推荐</strong>：本周趋势、华语剧集、日韩剧集、港台电影、正在热映、高分电影、今日播出。</li>
@@ -783,8 +825,8 @@ HTTP_PROXY=http://host.docker.internal:7890</code></pre>
             <p>这层代理只解决服务器访问 TMDb 的问题；网站本身的域名和 HTTPS 仍按第八节配置。</p>
         </section>
 
-        <section id="api">
-            <h2>十、API 一览</h2>
+        <section id="api" data-label="10 / API">
+            <h2>API 一览</h2>
             <p>这些是本项目自己的接口，供前端或二次开发使用：</p>
 <pre><code>GET  /api/config                     # 前台配置
 GET  /api/search?wd=关键词            # 聚合搜索，返回 list 和 groups（按片名/年份合并）
@@ -830,8 +872,8 @@ POST   /api/admin/client/icon
 DELETE /api/admin/client/icon</code></pre>
         </section>
 
-        <section id="faq">
-            <h2>十一、常见问题</h2>
+        <section id="faq" data-label="11 / FAQ">
+            <h2>常见问题</h2>
             <details>
                 <summary>启动后搜索没有任何结果？</summary>
                 <p>先确认后台已经添加了采集站并且处于「启用」状态。新安装默认是空的。</p>
@@ -889,7 +931,7 @@ DELETE /api/admin/client/icon</code></pre>
             </details>
         </section>
 
-        <section id="notice">
+        <section id="notice" data-label="— / Notice">
             <h2>免责声明</h2>
             <p>
                 本项目仅作为 Node.js 的学习项目开源，不存储、不发布、不参与任何影视内容的制作与传播。
@@ -898,53 +940,148 @@ DELETE /api/admin/client/icon</code></pre>
             <p>请只接入你有权使用的接口，并遵守当地法律法规。请支持正版影视内容。</p>
         </section>
 
-        <footer>
-            <p>冬瓜TV · 教程站点（GitHub Pages）</p>
-            <p><a href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener">返回仓库</a></p>
+        <footer class="doc-footer">
+            <div>
+                <p class="footer-brand"><img src="assets/donggua-icon.png" alt=""><strong>冬瓜TV</strong><span>Docs</span></p>
+                <p class="footer-note">自托管影视聚合站 · 教程站点（GitHub Pages）</p>
+            </div>
+            <nav aria-label="页脚链接">
+                <a href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener">GitHub</a>
+                <a href="#top">回到顶部 ↑</a>
+            </nav>
         </footer>
-    </main>
+    </div>
 </div>
+</main>
 
 <script>
-document.querySelectorAll('pre').forEach(function (pre) {
-    var btn = document.createElement('button');
-    btn.className = 'copy';
-    btn.type = 'button';
-    btn.textContent = '复制';
-    btn.addEventListener('click', function () {
-        var text = pre.querySelector('code') ? pre.querySelector('code').innerText : pre.innerText;
-        var done = function () { btn.textContent = '已复制'; setTimeout(function () { btn.textContent = '复制'; }, 1500); };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(text).then(done).catch(function () { fallback(text, done); });
-        } else { fallback(text, done); }
-    });
-    pre.style.position = 'relative';
-    pre.appendChild(btn);
-});
+(function () {
+    var body = document.body;
+    var header = document.querySelector('.site-header');
+    var toggle = document.querySelector('[data-toc-toggle]');
+    var closeButton = document.querySelector('.toc-close');
+    var sidebar = document.querySelector('.sidebar');
+    var links = Array.prototype.slice.call(document.querySelectorAll('.sidebar nav a'));
+    var sections = links.map(function (link) {
+        return document.querySelector(link.getAttribute('href'));
+    }).filter(Boolean);
+    var mobile = window.matchMedia('(max-width: 1020px)');
+    var previousFocus = null;
+    var ticking = false;
 
-function fallback(text, done) {
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); done(); } catch (e) {}
-    document.body.removeChild(ta);
-}
+    function setToc(open) {
+        body.classList.toggle('toc-open', open);
+        if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) {
+            previousFocus = document.activeElement;
+            window.requestAnimationFrame(function () {
+                if (closeButton) closeButton.focus({ preventScroll: true });
+            });
+        } else if (previousFocus && previousFocus.focus) {
+            previousFocus.focus({ preventScroll: true });
+            previousFocus = null;
+        }
+    }
 
-var links = Array.prototype.slice.call(document.querySelectorAll('.sidebar a'));
-var sections = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
-function onScroll() {
-    var y = window.scrollY + 120;
-    var current = sections[0];
-    sections.forEach(function (s) { if (s && s.offsetTop <= y) current = s; });
-    links.forEach(function (a) {
-        a.classList.toggle('active', current && a.getAttribute('href') === '#' + current.id);
+    if (toggle) {
+        toggle.addEventListener('click', function () {
+            setToc(!body.classList.contains('toc-open'));
+        });
+    }
+
+    document.querySelectorAll('[data-toc-close]').forEach(function (el) {
+        el.addEventListener('click', function () { setToc(false); });
     });
-}
-window.addEventListener('scroll', onScroll);
-onScroll();
+
+    links.forEach(function (link) {
+        link.addEventListener('click', function () {
+            if (mobile.matches) setToc(false);
+        });
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && body.classList.contains('toc-open')) setToc(false);
+    });
+
+    mobile.addEventListener('change', function (event) {
+        if (!event.matches && body.classList.contains('toc-open')) setToc(false);
+    });
+
+    function updateActive() {
+        var marker = window.scrollY + Math.min(window.innerHeight * 0.3, 190);
+        var current = null;
+        var firstTop = sections.length ? sections[0].offsetTop : 0;
+
+        if (window.scrollY + 34 >= firstTop) {
+            sections.forEach(function (section) {
+                if (section.offsetTop <= marker) current = section;
+            });
+        }
+
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 3) {
+            current = sections[sections.length - 1];
+        }
+
+        links.forEach(function (link) {
+            var active = current && link.getAttribute('href') === '#' + current.id;
+            link.classList.toggle('active', !!active);
+            if (active) link.setAttribute('aria-current', 'location');
+            else link.removeAttribute('aria-current');
+        });
+    }
+
+    function onScroll() {
+        if (header) header.classList.toggle('is-scrolled', window.scrollY > 14);
+        updateActive();
+        ticking = false;
+    }
+
+    window.addEventListener('scroll', function () {
+        if (!ticking) {
+            ticking = true;
+            window.requestAnimationFrame(onScroll);
+        }
+    }, { passive: true });
+
+    window.addEventListener('resize', updateActive, { passive: true });
+    onScroll();
+
+    function fallbackCopy(text, done) {
+        var area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        try { document.execCommand('copy'); done(); } catch (error) { /* no-op */ }
+        document.body.removeChild(area);
+    }
+
+    document.querySelectorAll('.doc-column pre').forEach(function (pre) {
+        var button = document.createElement('button');
+        var code = pre.querySelector('code');
+        button.className = 'copy';
+        button.type = 'button';
+        button.textContent = '复制';
+        button.setAttribute('aria-label', '复制代码');
+        button.addEventListener('click', function () {
+            var text = code ? code.innerText : pre.innerText;
+            var done = function () {
+                button.textContent = '已复制';
+                window.setTimeout(function () { button.textContent = '复制'; }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(function () {
+                    fallbackCopy(text, done);
+                });
+            } else {
+                fallbackCopy(text, done);
+            }
+        });
+        pre.appendChild(button);
+    });
+})();
 </script>
 </body>
 </html>
