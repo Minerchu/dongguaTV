@@ -25,6 +25,9 @@ services:
       - HTTP_PROXY=${HTTP_PROXY:-}
       # 生产环境务必修改（也可以在 .env 里设置）
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - ADMIN_ALLOWED_IPS=${ADMIN_ALLOWED_IPS:-}
+      - API_ALLOWED_ORIGINS=${API_ALLOWED_ORIGINS:-}
+      - TRUST_PROXY=${TRUST_PROXY:-}
       # 和下面的 pansou 服务在同一个 compose 网络里
       - PANSOU_URL=http://pansou:8888
       - HEALTH_CHECK=${HEALTH_CHECK:-1}

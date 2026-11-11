@@ -4,7 +4,6 @@ try { require('dotenv').config(); } catch (e) { }
 const express = require('express');
 const axios = require('axios');
 const bodyParser = require('body-parser');
-const cors = require('cors');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -44,11 +43,70 @@ const TMDB_LANGUAGE = process.env.TMDB_LANGUAGE || 'zh-CN';
 const SEARCH_CACHE_TTL = 60 * 1000;
 const SESSION_TTL = 24 * 60 * 60 * 1000;
 const adapterRegistry = createAdapterRegistry({ dir: ADAPTER_DIR, timeout: SEARCH_TIMEOUT });
+const API_ALLOWED_ORIGINS = new Set(String(process.env.API_ALLOWED_ORIGINS || '')
+    .split(',').map(value => value.trim()).filter(Boolean));
+const ADMIN_ALLOWED_IPS = new Set(String(process.env.ADMIN_ALLOWED_IPS || '')
+    .split(',').map(value => value.trim()).filter(Boolean));
 
 app.disable('x-powered-by');
-app.set('trust proxy', true);
-app.use(cors({ origin: true, credentials: true }));
+app.set('trust proxy', /^\d+$/.test(String(process.env.TRUST_PROXY || '').trim())
+    ? Number(process.env.TRUST_PROXY)
+    : (/^(1|true)$/i.test(String(process.env.TRUST_PROXY || '').trim()) ? 1 : false));
 app.use(bodyParser.json({ limit: '5mb' }));
+
+function isApiPath(req) {
+    return req.path === '/api' || req.path.startsWith('/api/') || req.path.startsWith('/tmdb/');
+}
+
+function isAllowedApiOrigin(req, origin) {
+    if (!origin) return true;
+    if (API_ALLOWED_ORIGINS.has(origin)) return true;
+    try {
+        return new URL(origin).host.toLowerCase() === String(req.get('host') || '').toLowerCase();
+    } catch (error) {
+        return false;
+    }
+}
+
+app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (!origin) return next();
+    if (!isAllowedApiOrigin(req, origin)) {
+        if (!isApiPath(req)) return next();
+        return res.status(403).json({ success: false, error: '跨站访问已关闭' });
+    }
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range, If-None-Match, X-Admin-Token');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Content-Type');
+    res.setHeader('Access-Control-Max-Age', '600');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+    next();
+});
+
+function normalizeIp(value) {
+    return String(value || '').replace(/^::ffff:/i, '').trim();
+}
+
+function isLoopbackIp(value) {
+    const ip = normalizeIp(value);
+    return ip === '::1' || ip === '127.0.0.1' || ip.startsWith('127.');
+}
+
+app.use((req, res, next) => {
+    if (!ADMIN_ALLOWED_IPS.size) return next();
+    const adminPath = req.path === '/admin.html' || req.path.startsWith('/api/admin/');
+    if (!adminPath) return next();
+    const ip = normalizeIp(req.ip || (req.socket && req.socket.remoteAddress));
+    const allowed = ADMIN_ALLOWED_IPS.has(ip) || (ADMIN_ALLOWED_IPS.has('loopback') && isLoopbackIp(ip));
+    if (allowed) return next();
+    if (req.path.startsWith('/api/')) {
+        return res.status(403).json({ success: false, error: '后台接口只允许指定 IP 访问' });
+    }
+    return res.status(403).type('text/plain; charset=utf-8').send('后台只允许指定 IP 访问。');
+});
 
 const WECHAT_GUIDE_PATH = '/wechat-guide.html';
 

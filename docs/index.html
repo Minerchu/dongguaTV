@@ -30,7 +30,7 @@
             <a href="#deploy">部署</a>
             <a href="#sites">采集站</a>
             <a href="#live">直播</a>
-            <a href="#api">API</a>
+            <a href="#api">接口</a>
         </nav>
         <div class="header-actions">
             <a class="github-link" href="https://github.com/Minerchu/dongguaTV" target="_blank" rel="noopener">GitHub <span>↗</span></a>
@@ -94,7 +94,7 @@
             <a href="#android"><span>07</span>Android 客户端</a>
             <a href="#reverse-proxy"><span>08</span>网站域名反代</a>
             <a href="#tmdb"><span>09</span>TMDb 功能</a>
-            <a href="#api"><span>10</span>API 一览</a>
+            <a href="#api"><span>10</span>接口安全</a>
             <a href="#faq"><span>11</span>常见问题</a>
             <a href="#notice"><span>—</span>免责声明</a>
         </nav>
@@ -825,51 +825,29 @@ HTTP_PROXY=http://host.docker.internal:7890</code></pre>
             <p>这层代理只解决服务器访问 TMDb 的问题；网站本身的域名和 HTTPS 仍按第八节配置。</p>
         </section>
 
-        <section id="api" data-label="10 / API">
-            <h2>API 一览</h2>
-            <p>这些是本项目自己的接口，供前端或二次开发使用：</p>
-<pre><code>GET  /api/config                     # 前台配置
-GET  /api/search?wd=关键词            # 聚合搜索，返回 list 和 groups（按片名/年份合并）
-GET  /api/sites                      # 站点列表（含启用状态）
-GET  /api/cloud/search?wd=关键词      # 网盘搜索
-GET  /api/live/channels              # 直播频道、分组和签名播放地址
-GET  /api/detail?site_key=站点key&amp;id=影片ID
-GET  /api/status                     # 公开状态页数据，不含站点地址
-GET  /api/hot                        # 最近 24 小时更新
-GET  /api/check?key=站点key           # 站点 PING 测速
-GET  /api/app/download               # 下载已生成的 Android APK
-GET  /api/app/icon                   # 客户端图标
+        <section id="api" data-label="10 / Security">
+            <h2>接口与访问权限</h2>
+            <p>前台页面和 Android 客户端需要调用同一套只读接口。它们只返回公开数据，不会返回后台密码、TMDb 凭据或采集站鉴权信息。</p>
+            <div class="note">
+                不能把全部 <code>/api</code> 设成只允许服务器本机访问，否则网页搜索、详情、播放、直播和 Android 客户端都会失效。需要收紧的是跨站调用和后台入口。
+            </div>
 
-# TMDb 同源代理（服务端注入 Key）
-GET  /tmdb/3/*
-GET  /tmdb/t/p/*</code></pre>
-            <p>管理接口需要先登录（HttpOnly Cookie 或 <code>X-Admin-Token</code>）：</p>
-<pre><code>POST   /api/admin/login
-GET    /api/admin/sites
-POST   /api/admin/sites
-PUT    /api/admin/sites/:key
-DELETE /api/admin/sites/:key
-POST   /api/admin/sites/test
-POST   /api/admin/sites/import
-GET    /api/admin/adapters
-POST   /api/admin/adapters/reload
-POST   /api/admin/health/check
-POST   /api/admin/live/test
-GET    /api/admin/health
-GET    /api/admin/backup
-GET    /api/admin/backups
-POST   /api/admin/backups
-POST   /api/admin/backups/:name/restore
-POST   /api/admin/restore
-PUT    /api/admin/settings
-POST   /api/admin/tmdb/test
-POST   /api/admin/pansou/test
-GET    /api/admin/client
-GET    /api/admin/client/qr.png
-PUT    /api/admin/client
-POST   /api/admin/client/build
-POST   /api/admin/client/icon
-DELETE /api/admin/client/icon</code></pre>
+            <h3>默认只允许本站同源</h3>
+            <p>服务端已关闭任意来源 CORS。其他网站即使知道接口地址，浏览器也不能跨站读取本站 API。确实有另一个前端需要跨域调用时，再显式填写完整 Origin：</p>
+<pre><code>API_ALLOWED_ORIGINS=https://app.example.com</code></pre>
+
+            <h3>后台接口必须登录</h3>
+            <p><code>/api/admin/*</code> 需要管理员会话，未登录返回 401；登录失败次数过多会临时锁定。后台的写操作、备份、采集站导入和客户端编译都不会对未登录请求开放。</p>
+
+            <h3>把后台限制到本机或固定 IP</h3>
+            <p>如果后台只允许服务器本机访问，设置 <code>ADMIN_ALLOWED_IPS=loopback</code>，再通过 SSH 隧道打开后台。也可以填写固定公网 IP，多个地址用逗号分隔。</p>
+<pre><code>ADMIN_ALLOWED_IPS=loopback
+# 或
+ADMIN_ALLOWED_IPS=203.0.113.10,198.51.100.7</code></pre>
+            <p>部署在 Nginx、Caddy 或宝塔后面时，还要设置 <code>TRUST_PROXY=1</code>，服务端才能识别真实 IP。直接映射端口时不要开启。</p>
+            <div class="warn">
+                CORS 只能阻止其他网页读取接口，不能阻止用 <code>curl</code> 直接请求公开只读接口。公开浏览类接口仍然必须能被访客浏览器调用；如果要挡机器人和高频请求，请在 Cloudflare 或反向代理层增加访问规则。
+            </div>
         </section>
 
         <section id="faq" data-label="11 / FAQ">
